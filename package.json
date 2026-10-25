@@ -1,0 +1,74 @@
+{
+  "name": "gospel-piano-academy",
+  "productName": "Gospel Piano Academy",
+  "version": "1.2.0",
+  "description": "Gospel Piano Academy - desktop edition",
+  "main": "main.js",
+  "author": "Gospel Piano Academy",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "prepare-fonts": "node scripts/prepare.js",
+    "start": "npm run prepare-fonts && electron .",
+    "dist": "npm run prepare-fonts && electron-builder",
+    "dist:win": "npm run prepare-fonts && electron-builder --win",
+    "dist:mac": "npm run prepare-fonts && electron-builder --mac",
+    "dist:linux": "npm run prepare-fonts && electron-builder --linux",
+    "get-samples": "node scripts/get-piano-samples.js"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.0"
+  },
+  "devDependencies": {
+    "@fontsource/bricolage-grotesque": "latest",
+    "@fontsource/hanken-grotesk": "latest",
+    "@fontsource/ibm-plex-mono": "latest",
+    "electron": "latest",
+    "electron-builder": "latest"
+  },
+  "build": {
+    "appId": "org.gospelpianoacademy.desktop",
+    "productName": "Gospel Piano Academy",
+    "copyright": "Gospel Piano Academy",
+    "files": [
+      "main.js",
+      "app/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Gospel Piano Academy"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.education"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icon.png",
+      "category": "Education",
+      "maintainer": "Gospel Piano Academy <noreply@users.noreply.github.com>"
+    }
+  }
+}
