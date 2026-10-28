@@ -24,7 +24,7 @@
     "get-samples": "node scripts/get-piano-samples.js"
   },
   "dependencies": {
-    "electron-updater": "latest"
+    "electron-updater": "^6.3.0"
   },
   "devDependencies": {
     "@fontsource/bricolage-grotesque": "latest",
