@@ -17,4 +17,8 @@ for (const [slug, weights] of Object.entries(fams)) {
     else { missing++; console.warn('Font not found (system fallback will be used):', name); }
   }
 }
+if (missing && process.argv.includes('--strict')) {
+  console.error(`Fonts: ${missing} missing. Run "npm install" first; an installer built now would look wrong.`);
+  process.exit(1);
+}
 console.log(missing ? `Fonts: ${missing} missing` : 'Fonts copied.');

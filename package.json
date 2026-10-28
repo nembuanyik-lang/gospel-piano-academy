@@ -1,37 +1,46 @@
 {
   "name": "gospel-piano-academy",
-  "productName": "Gospel Piano Academy",
-  "version": "1.2.0",
-  "description": "Gospel Piano Academy - desktop edition",
+  "productName": "Gospel Music Academy",
+  "version": "2.2.0",
+  "description": "Gospel Music Academy - learn gospel piano and guitar, desktop edition",
   "main": "main.js",
-  "author": "Gospel Piano Academy",
+  "author": "Gospel Music Academy",
   "license": "UNLICENSED",
   "private": true,
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
+    "pin": "npm install --save-exact electron@latest electron-builder@latest electron-updater@latest playwright@latest @fontsource/bricolage-grotesque@latest @fontsource/hanken-grotesk@latest @fontsource/ibm-plex-mono@latest",
     "prepare-fonts": "node scripts/prepare.js",
     "start": "npm run prepare-fonts && electron .",
-    "dist": "npm run prepare-fonts && electron-builder",
-    "dist:win": "npm run prepare-fonts && electron-builder --win",
-    "dist:mac": "npm run prepare-fonts && electron-builder --mac",
-    "dist:linux": "npm run prepare-fonts && electron-builder --linux",
+    "check": "node scripts/check.js",
+    "test": "node --test tests/unit.test.js tests/main.test.js",
+    "e2e": "node --test tests/e2e/app.test.js tests/e2e/mic.test.js",
+    "dist": "npm run check && node scripts/prepare.js --strict && electron-builder",
+    "dist:win": "npm run check && node scripts/prepare.js --strict && electron-builder --win",
+    "dist:mac": "npm run check && node scripts/prepare.js --strict && electron-builder --mac",
+    "dist:linux": "npm run check && node scripts/prepare.js --strict && electron-builder --linux",
     "get-samples": "node scripts/get-piano-samples.js"
   },
   "dependencies": {
-    "electron-updater": "^6.3.0"
+    "electron-updater": "latest"
   },
   "devDependencies": {
     "@fontsource/bricolage-grotesque": "latest",
     "@fontsource/hanken-grotesk": "latest",
     "@fontsource/ibm-plex-mono": "latest",
     "electron": "latest",
-    "electron-builder": "latest"
+    "electron-builder": "latest",
+    "playwright": "latest"
   },
   "build": {
     "appId": "org.gospelpianoacademy.desktop",
-    "productName": "Gospel Piano Academy",
-    "copyright": "Gospel Piano Academy",
+    "productName": "Gospel Music Academy",
+    "copyright": "Gospel Music Academy",
     "files": [
       "main.js",
+      "preload.js",
       "app/**/*",
       "build/icon.png",
       "package.json"
@@ -52,14 +61,15 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Gospel Piano Academy"
+      "shortcutName": "Gospel Music Academy"
     },
     "mac": {
       "target": [
         "dmg"
       ],
       "icon": "build/icon.png",
-      "category": "public.app-category.education"
+      "category": "public.app-category.education",
+      "hardenedRuntime": true
     },
     "linux": {
       "target": [
@@ -68,7 +78,7 @@
       ],
       "icon": "build/icon.png",
       "category": "Education",
-      "maintainer": "Gospel Piano Academy <noreply@users.noreply.github.com>"
+      "maintainer": "Gospel Music Academy <noreply@users.noreply.github.com>"
     }
   }
 }
