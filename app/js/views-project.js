@@ -58,11 +58,14 @@ function melodyCard(P) {
 function guideCard(P) {
   const g = P.guide;
   return '<section class="card"><p class="eyebrow">Guide track</p><h3>Record your voice or instrument with the song</h3>' +
-    '<p class="muted">Sing or play along with the whole song while the app records through the microphone. Use headphones so the backing does not bleed into the recording. Run Timing calibration first for the best timing.</p>' +
-    '<div class="row wrap"><button class="btn primary" type="button" id="guiderec">' + icon('mic') + (g ? 'Record again' : 'Record a guide track') + '</button>' +
-    (g ? '<button class="btn ghost" type="button" data-act="pguidesave">Save the guide as a file</button><button class="btn ghost" type="button" data-act="pguidedel">Delete it</button>' : '') + '</div>' +
-    '<p class="tiny" id="guideinfo" aria-live="polite">' + (g ? 'Guide track recorded (' + fmtTime(g.dur) + '). It plays with the song and can be included in the audio export. It is kept on this computer only, not in backups.' : 'No guide track yet.') + '</p>' +
-    (g ? '<div class="grid2"><label class="field"><span>Guide volume</span><input type="range" min="0" max="150" value="' + Math.round((g.gain == null ? 1 : g.gain) * 100) + '" data-bind="pguidegain" aria-label="Guide volume"></label>' +
+    '<p class="muted">Sing or play along with the whole song while the app records through the microphone. <b>Wear headphones</b> so the backing does not go into the recording, keep the microphone close (a hand-width away), and test it first: the green bar should jump when you sing.</p>' +
+    '<div class="grid2"><label class="field"><span>Microphone</span><select id="guidemic" data-bind="pmic"><option value="">Windows default microphone</option></select></label>' +
+    '<div class="field"><span>Level</span><div class="miclevel" aria-hidden="true"><i id="guidelvl"></i></div></div></div>' +
+    '<div class="row wrap"><button class="btn ghost" type="button" id="guidetest">' + icon('mic') + 'Test the microphone</button>' +
+    '<button class="btn primary" type="button" id="guiderec">' + icon('mic') + (g ? 'Record again' : 'Record a guide track') + '</button></div>' +
+    (g ? '<div class="row wrap"><button class="btn ghost" type="button" id="guidehear">' + icon('play') + 'Listen to the guide alone</button><button class="btn ghost" type="button" data-act="pguidesave">Save the guide as a file</button><button class="btn ghost" type="button" data-act="pguidedel">Delete it</button></div>' : '') +
+    '<p class="tiny" id="guideinfo" aria-live="polite">' + (g ? 'Guide track recorded (' + fmtTime(g.dur) + '). Press Play the song with "With guide track" ticked to hear it with the backing; it can also be included in the audio export. It is kept on this computer only, not in backups.' : 'No guide track yet.') + '</p>' +
+    (g ? '<div class="grid2"><label class="field"><span>Guide volume</span><input type="range" min="0" max="200" value="' + Math.round((g.gain == null ? 1 : g.gain) * 100) + '" data-bind="pguidegain" aria-label="Guide volume"></label>' +
       '<label class="field"><span>Line up the timing <b class="mono" id="nudgev">' + (g.nudgeMs || 0) + '</b> ms</span><input type="range" min="-250" max="250" step="5" value="' + (g.nudgeMs || 0) + '" data-bind="pguidenudge" aria-label="Guide timing"></label></div>' : '') + '</section>';
 }
 function exportCard(P) {
@@ -160,20 +163,59 @@ function mountProject(root, P) {
   /* note editor */
   mountRoll(root, P);
 
-  /* guide track recorder */
-  const gBtn = $('#guiderec', root), gInfo = $('#guideinfo', root);
-  let g = null;
+  /* guide track: microphone choice, level meter, test, recorder, listen alone */
+  const gBtn = $('#guiderec', root), gInfo = $('#guideinfo', root), gLvl = $('#guidelvl', root), gMic = $('#guidemic', root), gTest = $('#guidetest', root), gHear = $('#guidehear', root);
+  const showLvl = p => { if (gLvl) { gLvl.style.width = Math.min(100, Math.round(Math.sqrt(Math.max(0, p)) * 110)) + '%'; gLvl.classList.toggle('hot', p > 0.95); } };
+  const fillMics = async () => {
+    if (!gMic) return;
+    const mics = await listMics();
+    gMic.innerHTML = '<option value="">Windows default microphone</option>' + mics.filter(m => m.deviceId && m.deviceId !== 'default' && m.deviceId !== 'communications').map((m, i) => '<option value="' + esc(m.deviceId) + '"' + (m.deviceId === S.prefs.micId ? ' selected' : '') + '>' + esc(m.label || ('Microphone ' + (i + 1))) + '</option>').join('');
+  };
+  fillMics();
+  let g = null, tst = null, hear = null;
+  const stopTest = () => { if (tst) { const t = tst; tst = null; t.stop(); } };
+  const stopHear = () => { if (hear) { try { hear.stop(); } catch (e) { /* ignore */ } hear = null; if (gHear) gHear.innerHTML = icon('play') + 'Listen to the guide alone'; } };
+  if (gTest) gTest.addEventListener('click', () => {
+    if (tst) { stopTest(); return; }
+    if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) { gInfo.textContent = 'Recording is not available on this device.'; return; }
+    stopProjPlay(); stopHear();
+    gTest.innerHTML = icon('stop') + 'Stop the test'; gInfo.textContent = 'Sing or speak now, at the volume you will sing…';
+    tst = testMic(S.prefs.micId || null, (p, peak) => {
+      if (p === -1) { tst = null; gTest.innerHTML = icon('mic') + 'Test the microphone'; gInfo.textContent = 'The microphone could not be opened. ' + MIC_HELP; return; }
+      if (p !== null) { showLvl(p); return; }
+      tst = null; showLvl(0); gTest.innerHTML = icon('mic') + 'Test the microphone'; fillMics();
+      gInfo.textContent = peak < GUIDE_SILENT ? 'Nothing was heard. Choose another microphone above, or: ' + MIC_HELP
+        : peak < 0.05 ? 'The microphone works but is very quiet. Move closer, or raise the microphone volume in Windows sound settings. The app will boost the recording, but a stronger signal sounds cleaner.'
+        : peak > 0.95 ? 'Very loud: the sound may distort. Move back a little or lower the microphone volume in Windows.'
+        : 'The microphone sounds good. You can record.';
+    }, 6000);
+  });
+  if (gHear) gHear.addEventListener('click', async () => {
+    if (hear) { stopHear(); return; }
+    stopProjPlay(); stopTest();
+    const buf = await GuideStore.buffer(P).catch(() => null);
+    if (!buf) { gInfo.textContent = 'The guide track was not found on this computer.'; return; }
+    const c = Snd.ensure(); if (!c) return;
+    hear = Snd.playBuffer(buf, c.currentTime + 0.05, P.guide.gain == null ? 1 : P.guide.gain);
+    if (hear) { gHear.innerHTML = icon('stop') + 'Stop'; hear.onended = () => { hear = null; if (gHear) gHear.innerHTML = icon('play') + 'Listen to the guide alone'; }; }
+  });
   if (gBtn) gBtn.addEventListener('click', () => {
     if (g) { g.stop(); return; }
     if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) { gInfo.textContent = 'Recording is not available on this device.'; return; }
-    stopProjPlay();
+    stopProjPlay(); stopTest(); stopHear();
     gBtn.innerHTML = icon('stop') + 'Stop recording';
     g = startGuideRecording(P, s => {
-      if (s.state === 'recording') gInfo.textContent = 'One bar of clicks, then the song plays. Recording…';
-      else if (s.state === 'saved') { g = null; toast('Guide track saved (' + fmtTime(s.seconds) + ').'); render(); }
-      else { g = null; gBtn.innerHTML = icon('mic') + 'Record a guide track'; gInfo.textContent = s.msg || 'Nothing was recorded.'; }
-    });
+      if (s.state === 'level') { showLvl(s.peak); return; }
+      if (s.state === 'recording') { gInfo.textContent = 'Recording' + (s.label ? ' from ' + s.label : '') + '. One bar of clicks, then the song plays. Watch the green bar move as you sing.'; return; }
+      showLvl(0);
+      if (s.state === 'saved') {
+        g = null; pst().withGuide = true;
+        toast('Guide track saved (' + fmtTime(s.seconds) + ').' + (s.quiet ? ' It was quiet, so the app boosted it. Move closer next time.' : ''));
+        render();
+      } else { g = null; gBtn.innerHTML = icon('mic') + (P.guide ? 'Record again' : 'Record a guide track'); gInfo.textContent = s.msg || 'Nothing was recorded.'; }
+    }, { deviceId: S.prefs.micId || null });
   });
+  cl.push(() => { stopTest(); stopHear(); });
   cl.push(() => { if (g) g.stop(); });
   return () => cl.forEach(f => { try { f(); } catch (e) { /* ignore */ } });
 }
@@ -285,6 +327,7 @@ const PROJECT_BINDS = {
   plen: el => { const P = curProj(); P.sections[pst().sec].len = +el.value; touch(); render(); },
   pcopy: el => { const P = curProj(), from = el.value; if (!from || !P.sections[from]) return; P.sections[pst().sec] = { degs: P.sections[from].degs.slice(), len: P.sections[from].len }; syncLegacy(P); touch(); toast('Copied the chords from the ' + from + '.'); render(); },
   pwithguide: el => { pst().withGuide = el.checked; },
+  pmic: el => { S.prefs.micId = el.value || undefined; if (!el.value) delete S.prefs.micId; touch(); },
   pguidegain: el => { const P = curProj(); if (P.guide) { P.guide.gain = +el.value / 100; touch(); } },
   pguidenudge: el => { const P = curProj(); if (P.guide) { P.guide.nudgeMs = +el.value; const v = $('#nudgev'); if (v) v.textContent = el.value; touch(); } }
 };

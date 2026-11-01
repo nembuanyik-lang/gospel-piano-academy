@@ -517,3 +517,24 @@ input[type="range"] { width: 100%; accent-color: var(--accent); min-height: 32px
 .roll .rn.on { fill: var(--gold); fill-opacity: 1; stroke: var(--fg); stroke-width: 1.5; }
 .roll-tools .btn { min-width: 0; }
 .player h3 { margin: .1rem 0; }
+.miclevel i.hot { background: var(--warn); }
+.field .miclevel { height: 10px; margin-top: .9rem; }
+
+/* At your piano: the 20-minute routine */
+.routine h2 { margin: .2rem 0 .4rem; }
+.rt-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: .9rem 1rem; margin: .9rem 0; box-shadow: var(--shadow); }
+.rt-now { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "state clock" "name clock"; align-items: center; gap: 0 1rem; margin-bottom: .6rem; }
+.rt-now #rtstate { grid-area: state; }
+.rt-now #rtname { grid-area: name; font-family: var(--font-display); font-size: 1.25rem; }
+.rt-clock { grid-area: clock; font-size: 2.4rem; font-weight: 600; letter-spacing: .02em; }
+.rt-met { align-items: flex-end; margin-top: .4rem; }
+.rt-met .field { margin: 0; max-width: 9rem; }
+.rt-blocks { list-style: none; padding: 0; margin: 0 0 1rem; display: grid; gap: .5rem; }
+.rt-blocks li { display: grid; grid-template-columns: 4.2rem 1fr; gap: .8rem; padding: .7rem .8rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.rt-blocks li p { margin: .2rem 0 0; }
+.rt-blocks li.cur { border-color: var(--accent); background: var(--accent-soft); }
+.rt-blocks li.done { opacity: .55; }
+.rt-blocks li.done b::after { content: ' ✓'; color: var(--ok); }
+.rt-min { color: var(--muted); padding-top: .15rem; }
+.rt-ready { padding: .7rem .9rem; border-radius: 12px; background: var(--ok-soft); }
+@media (max-width: 560px) { .rt-clock { font-size: 1.8rem; } .rt-blocks li { grid-template-columns: 1fr; gap: .2rem; } }

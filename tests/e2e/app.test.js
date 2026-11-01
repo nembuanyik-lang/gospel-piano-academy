@@ -349,3 +349,68 @@ test('song lab: older projects open unchanged in the studio', async () => {
   assert.deepEqual(r, { verse: [1, 5, 6, 4], chorus: [1, 5, 6, 4], mel: 1, ts: 4, bass: 'rootfifth' });
   assert.deepEqual(errors, []);
 });
+
+test('every chord, performance and note exercise fits on the drawn keyboard, and every lesson diagram shows all its keys', async () => {
+  const { page, errors } = await open();
+  await onboard(page);
+  const bad = await page.evaluate(() => {
+    const g = window.__gpa, out = [];
+    const host = document.createElement('div'); document.body.appendChild(host);
+    for (const L of window.Curriculum.LESSONS) {
+      const exs = [].concat(L.practice || [], L.challenge ? [L.challenge] : []).map(x => x.ex || x).filter(x => x && ['chord', 'perf', 'seq'].includes(x.type));
+      for (const ex of exs) {
+        const api = g.mountExercise(host, ex, { hints: true });
+        const keys = new Set([...host.querySelectorAll('.ex-piano [data-m]')].map(k => +k.dataset.m));
+        const lo0 = ex.range ? ex.range[0] : 60;
+        const need = exerciseMidis(ex, Math.min(lo0, Math.min.apply(null, [...keys])));
+        const miss = need.filter(m => !keys.has(m));
+        if (miss.length) out.push(L.id + ' ' + ex.type + ' misses ' + miss.join(','));
+        const lit = host.querySelectorAll('.ex-piano .hint').length;
+        if (ex.type === 'chord' && !lit) out.push(L.id + ' chord shows no hint');
+        api.destroy();
+      }
+      if (L.visual && L.visual.steps) {
+        const api = mountVisual(host, L);
+        const keys = new Set([...host.querySelectorAll('.vpiano [data-m]')].map(k => +k.dataset.m));
+        L.visual.steps.forEach((st, i) => {
+          const ms = st.chord ? chordHint({ root: st.chord.root, quality: st.chord.quality, inv: st.chord.inv || 0 }, Math.min.apply(null, [...keys])).midis : (st.hi || []).map(t => E.parseToken(t).midi).filter(m => m !== undefined);
+          const miss = ms.filter(m => !keys.has(m)); if (miss.length) out.push(L.id + ' diagram step ' + (i + 1) + ' misses ' + miss.join(','));
+        });
+        if (api && api.destroy) api.destroy();
+      }
+    }
+    host.remove(); return out;
+  });
+  assert.deepEqual(bad, []);
+  assert.deepEqual(errors, []);
+});
+
+test('every piano lesson has a 20-minute routine at the piano, and finishing it is saved and shown on Home', async () => {
+  const { page, errors } = await open();
+  await onboard(page);
+  const info = await page.evaluate(() => {
+    const ids = window.Curriculum.LESSONS.map(L => L.id);
+    return { missing: ids.filter(id => !pianoRoutine(id)), wrong: ids.filter(id => routineMinutes(window.__gpa.C.byId[id]) !== 20) };
+  });
+  assert.deepEqual(info.missing, []); assert.deepEqual(info.wrong, []);
+  const first = await page.evaluate(() => window.Curriculum.LESSONS[0].id);
+  await page.waitForSelector('[data-act=openroutine]');
+  await page.click('[data-act=openroutine]');
+  await page.waitForSelector('.routine #rtgo');
+  assert.match(await page.textContent('.steplabel'), /At your piano/);
+  assert.equal(await page.$$eval('.rt-blocks li', l => l.length), 6);
+  await page.click('#rtgo');
+  assert.match(await page.textContent('#rtstate'), /Block 1 of 6/);
+  for (let i = 0; i < 5; i++) await page.click('#rtnext');
+  assert.match(await page.textContent('#rtstate'), /Block 6 of 6/);
+  // the last block ends: fast-forward its clock
+  await page.evaluate(() => { RT.endAt = Date.now() - 1; });
+  await page.waitForFunction(id => window.__gpa.S().routines[id] && window.__gpa.S().routines[id].n === 1, first, { timeout: 5000 });
+  assert.equal(await page.evaluate(() => window.__gpa.S().today.items.piano), true);
+  await page.waitForSelector('.routine .tag.ok');
+  // logging by hand counts too, and survives the backup cleaner
+  await page.click('#rtlog');
+  const kept = await page.evaluate(id => { const st = JSON.parse(JSON.stringify(window.__gpa.S())); st.routines['<bad>'] = { n: 5 }; st.routines[id].n = 'x'; return window.Sanitize.cleanState(st, {}).routines; }, first);
+  assert.equal(kept['<bad>'], undefined); assert.equal(kept[first].n, 0);
+  assert.deepEqual(errors, []);
+});

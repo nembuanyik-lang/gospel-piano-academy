@@ -18,10 +18,28 @@ function perfSequence(ex) {
   const base = ex.base || 'C', range = perfRange(ex);
   return (ex.keys || [base]).reduce((all, k) => all.concat(ex.prog.map(t => perfTranspose(t, perfShift(base, k), k, range))), []);
 }
+/* Every key an exercise will ask for or light up, so the drawn keyboard can always reach it. */
+function exerciseMidis(ex, lo) {
+  const out = [], add = ms => ms.forEach(m => { if (typeof m === 'number' && isFinite(m)) out.push(m); });
+  const chordMs = t => t.notes ? t.notes.map(E.midiOf) : chordHint(t, lo).midis;
+  if (ex.type === 'chord') (ex.targets || []).forEach(t => add(chordMs(t)));
+  else if (ex.type === 'perf') perfSequence(ex).forEach(t => add(t.notes ? t.notes.map(E.midiOf) : t.root ? chordHint(t, lo).midis : []));
+  else if (ex.type === 'seq') add((ex.notes || []).map(n => E.parseToken(n).midi));
+  return out;
+}
+/* widen a keyboard range to include the given keys: start on a C or F, end on an E or B, never narrower than asked */
+function fitRange(lo, hi, midis) {
+  if (!midis.length) return [lo, hi];
+  let a = Math.min(lo, Math.min.apply(null, midis)), b = Math.max(hi, Math.max.apply(null, midis));
+  while (a > 21 && pcOf(a) !== 0 && pcOf(a) !== 5) a--;
+  while (b < 108 && pcOf(b) !== 4 && pcOf(b) !== 11) b++;
+  return [a, b];
+}
 function mountExercise(host, ex, opt) {
   opt = opt || {};
   if (ex.type === 'perf' && !ex.range) ex = Object.assign({}, ex, { range: perfRange(ex) });
-  const lo = ex.range ? ex.range[0] : 60, hi = ex.range ? ex.range[1] : 72;
+  const r0 = [ex.range ? ex.range[0] : 60, ex.range ? ex.range[1] : 72];
+  const [lo, hi] = fitRange(r0[0], r0[1], exerciseMidis(ex, r0[0]));
   const isTap = ex.type === 'tap';
   let hints = opt.hints !== undefined ? opt.hints : ex.hints === true;
   const locked = opt.hints === false;
@@ -516,13 +534,14 @@ function rhythmBarsHtml() {
 
 /* ---------------------------------------------------------------- lesson player */
 const ui = { lesson: null, testout: null, onboarding: null };
-const STEP_LABELS = { objective: 'Objective', theory: 'Theory', visual: 'Visual', listen: 'Listen', play: 'Play', practice: 'Practice', apply: 'Apply', challenge: 'Challenge', quiz: 'Assessment', mastery: 'Mastery' };
+const STEP_LABELS = { objective: 'Objective', theory: 'Theory', visual: 'Visual', listen: 'Listen', play: 'Play', practice: 'Practice', piano: 'At your piano', apply: 'Apply', challenge: 'Challenge', quiz: 'Assessment', mastery: 'Mastery' };
 function lessonSteps(L) {
   const s = ['objective', 'theory'];
   if (L.visual) s.push('visual');
   if (L.listen && L.listen.length) s.push('listen');
   s.push('play');
   if (L.practice && L.practice.length) s.push('practice');
+  if (pianoRoutine(L.id)) s.push('piano');
   s.push('apply', 'challenge', 'quiz', 'mastery');
   return s;
 }
@@ -530,6 +549,7 @@ function stepDone(L, step) {
   const r = S.lessons[L.id] || {};
   if (step === 'play') return !!r.play;
   if (step === 'practice') return (L.practice || []).every((_, i) => r.pdone && r.pdone[i]);
+  if (step === 'piano') return !!routineLog(L.id);
   if (step === 'challenge') return !!r.challenge;
   if (step === 'quiz') return !!(r.quiz && r.quiz.best >= 70);
   if (step === 'mastery') return r.status === 'mastered';
@@ -569,6 +589,8 @@ function viewLesson() {
     body = '<div class="card"><p class="eyebrow">Practice ' + (stepDone(L, 'practice') ? '<span class="tag ok">Done</span>' : '<span class="tag">' + needs.practice + '</span>') + '</p>' +
       (n > 1 ? '<div class="seg">' + L.practice.map((_, i) => '<button type="button" class="' + (i === st.pi ? 'on' : '') + '" data-act="lpi" data-i="' + i + '">Exercise ' + (i + 1) + (r.pdone && r.pdone[i] ? ' ✓' : '') + '</button>').join('') + '</div>' : '') +
       '<div id="exh"></div></div>';
+  } else if (cur === 'piano') {
+    body = routineHtml(L);
   } else if (cur === 'apply') {
     const gl = GOSPEL_LINK[L.id];
     body = '<div class="card prose"><p class="eyebrow">Apply it in gospel music</p><p>' + esc(L.apply.text) + '</p>' +
@@ -615,6 +637,7 @@ function viewLesson() {
         const h = mountExercise($('#exh', root), L.practice[st.pi], { onDone: () => { const r2 = rec(); r2.pdone = r2.pdone || []; r2.pdone[st.pi] = true; markToday('lesson'); evalLesson(L.id); refreshTabs(); } });
         cl.push(h);
       }
+      if (cur === 'piano') cl.push(mountRoutine($('.routine', root), L));
       if (cur === 'challenge') {
         const h = mountExercise($('#exh', root), L.challenge, { hints: false, onDone: () => { rec().challenge = true; markToday('lesson'); evalLesson(L.id); refreshTabs(); } });
         cl.push(h);
@@ -648,7 +671,13 @@ function viewLesson() {
 function mountVisual(host, L) {
   const v = L.visual, cl = [];
   if (v.rhythm) { host.innerHTML = rhythmBarsHtml(); return { destroy() {} }; }
-  const range = v.range || [48, 72];
+  const r0 = v.range || [48, 72];
+  const vMidis = [];
+  (v.steps || []).forEach(st => {
+    if (st.chord) chordHint({ root: st.chord.root, quality: st.chord.quality, inv: st.chord.inv || 0 }, r0[0]).midis.forEach(m => vMidis.push(m));
+    else (st.hi || []).forEach(tok => { const m = E.parseToken(tok).midi; if (m !== undefined) vMidis.push(m); });
+  });
+  const range = fitRange(r0[0], r0[1], vMidis);
   host.innerHTML = (v.staff ? '<div class="vstaff"></div>' : '') + '<div class="vpiano"></div>' + (v.chordsInKey ? '<div class="cik"></div>' : '') + '<p class="caption" aria-live="polite"></p>' +
     (v.steps && v.steps.length > 1 ? '<div class="row"><button class="btn ghost sm" type="button" data-v="prev">' + icon('back') + 'Previous</button><span class="tiny vcount"></span><button class="btn ghost sm" type="button" data-v="next">Next' + icon('chev') + '</button></div>' : '');
   const piano = Piano($('.vpiano', host), { lo: range[0], hi: range[1], names: true, height: 150 });

@@ -79,6 +79,13 @@ The GitHub release build does this automatically. You can also supply your own r
 - **Practice > Challenges and tools > Timing calibration** measures the delay of your speakers and keyboard
   so play-along scores are fair.
 
+## At your piano (in every lesson)
+
+Each piano lesson has an "At your piano" step: a 20-minute routine for your own piano or keyboard, with a
+block timer, chimes, a metronome and a session log. Routines live in `app/js/routines-1.js` to `routines-4.js`
+(one entry per lesson id: focus, four blocks totalling 15 minutes, and a ready check); the app adds the warm-up
+and close. A browser test checks that every lesson has one and that each totals 20 minutes.
+
 ## The Song Lab studio (Song Lab > a song project)
 
 - Each section (intro, verse, pre-chorus, chorus, bridge, outro) has its own chords and its own melody,

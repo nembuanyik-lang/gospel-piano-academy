@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.3.0 — At your piano
+
+- A 20-minute routine for the learner's own piano in every one of the 151 piano lessons (`app/js/routines-1.js` to
+  `routines-4.js`): a 3-minute warm-up (five-finger patterns in Level 1, otherwise the key of the day), four
+  lesson-specific blocks totalling 15 minutes, a 2-minute close, and a "ready to move on when" check.
+- New lesson step "At your piano" (`app/js/routine-ui.js`): block timer with chimes, pause, next block, reset,
+  a metronome, and a log (`routines` in progress and backups, cleaned by the sanitiser). Timer time counts as practice.
+  Optional: mastery rules are unchanged.
+- Home > Today's practice offers the routine for the current lesson.
+- Fixed: chord, performance and note exercises (159 of 210 chord exercises) and lesson diagrams drew a keyboard
+  too short for some chords (for example G or A major, inversions, sevenths in C4–C5). The keyboard now widens to
+  include every key the exercise asks for. Browser test covers every exercise and diagram.
+
+## 2.2.1 — Clearer guide recordings
+
+- Guide recording uses music capture settings: echo cancellation, noise suppression and automatic gain off
+  (echo cancellation was chopping or muting singing over the backing).
+- Microphone picker (remembered), Test the microphone with advice, live level bar while recording.
+- Takes are normalised (peak 0.9, at most 12x boost); a silent take is not saved and the earlier guide is kept,
+  with Windows microphone-privacy guidance.
+- Listen to the guide alone; guide volume up to 200 %.
+
 ## 2.2.0 — The Song Lab studio
 
 - One arrangement engine (`app/js/studio.js`) drives playback, MIDI, WAV and the chord chart, so they always match.

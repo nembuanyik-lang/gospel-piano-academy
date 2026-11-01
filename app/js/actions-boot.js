@@ -46,6 +46,7 @@ const ACTIONS = {
   lpi: el => { Snd.stopAll(); ui.lesson.pi = +el.dataset.i; render(); },
   lgo: el => { Snd.stopAll(); const steps = lessonSteps(C.byId[ui.lesson.id]); ui.lesson.step = Math.max(0, steps.indexOf(el.dataset.step)); ui.lesson.pi = 0; render(); window.scrollTo(0, 0); },
   openlesson: el => openLesson(el.dataset.id),
+  openroutine: el => { const L = C.byId[el.dataset.id]; if (!L) return; const i = lessonSteps(L).indexOf('piano'); openLesson(L.id, Math.max(0, i)); },
   songpreset: el => { sl.pid = el.dataset.id; sl.key = el.dataset.key; sl.sev = el.dataset.sev === '1'; sl.degs = E.PROGRESSIONS.find(x => x.id === sl.pid).degs.slice(); sl.autoplay = false; go('song'); },
   toglevel: el => { const id = el.dataset.id; const cur = ui.courseOpen[id]; const nl = nextLesson(); const dflt = id === (nl ? C.byId[nl].level : 'G'); ui.courseOpen[id] = cur === undefined ? !dflt : !cur; render(); },
   testout: el => openTestout(el.dataset.id),

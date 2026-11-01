@@ -50,12 +50,31 @@ test('song lab: a guide track is recorded in sync with the song and mixed into t
     await p.click('#guiderec');
     await p.waitForFunction(() => window.__gpa.S().songs[0].guide, null, { timeout: 30000 });
     const dur = await p.evaluate(() => window.__gpa.S().songs[0].guide.dur);
+    const peak = await p.evaluate(async () => { const P = window.__gpa.S().songs[0]; const b = await GuideStore.buffer(P); return guidePeak(b.getChannelData(0)); });
+    assert.ok(peak > 0.8 && peak <= 0.95, 'the take is brought to a healthy level, got ' + peak);
     assert.ok(dur >= 7 && dur <= 10, 'about 8 seconds recorded, got ' + dur);
     await p.waitForSelector('[data-act=pwav][data-mix=guide]');
     const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 120000 }), p.click('[data-act=pwav][data-mix=guide]')]);
     const buf = fs.readFileSync(await dl.path());
     assert.equal(buf.toString('latin1', 8, 12), 'WAVE');
     assert.match(dl.suggestedFilename(), /with-guide/);
+    assert.deepEqual(errors, []);
+  } finally { await b.close(); srv.close(); }
+});
+
+test('song lab: a silent microphone saves nothing and explains how to fix it', async () => {
+  const silent = path.join(FIX, 'silence.wav');
+  if (!fs.existsSync(silent)) execFileSync('python3', ['-c', 'import wave,sys;w=wave.open(sys.argv[1],"wb");w.setnchannels(1);w.setsampwidth(2);w.setframerate(48000);w.writeframes(bytes(48000*12*2));w.close()', silent]);
+  const srv = serve(path.join(__dirname, '..', '..', 'app'), 8793);
+  const b = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--use-file-for-fake-audio-capture=' + silent, '--autoplay-policy=no-user-gesture-required'] });
+  try {
+    const p = await (await b.newContext({ permissions: ['microphone'] })).newPage(); const errors = []; p.on('pageerror', e => errors.push(e.message));
+    await p.goto('http://localhost:8793/');
+    await p.evaluate(() => { const g = window.__gpa; g.S().profile.onboarded = true; g.go('song'); g.ACTIONS.slnew(); const P = g.S().songs[0]; P.bpm = 160; P.structure = ['Chorus']; g.go('song', { pid: P.id }); });
+    assert.ok(await p.$('#guidemic') && await p.$('#guidetest'), 'microphone picker and test are shown');
+    await p.click('#guiderec');
+    await p.waitForFunction(() => /did not pick up any sound/.test(document.querySelector('#guideinfo').textContent), null, { timeout: 30000 });
+    assert.equal(await p.evaluate(() => window.__gpa.S().songs[0].guide || null), null);
     assert.deepEqual(errors, []);
   } finally { await b.close(); srv.close(); }
 });

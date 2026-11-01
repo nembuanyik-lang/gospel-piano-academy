@@ -181,29 +181,56 @@ const GuideStore = (function () {
 /* ---- recording a guide track in sync with the song ----
    The microphone is captured inside the same audio clock as the backing, so each block of sound has an
    exact time. Recording starts with the song; the measured delay (Timing calibration) is removed, and a
-   nudge slider fixes any remaining offset. */
-function startGuideRecording(P, onState) {
-  let stream = null, node = null, src = null, chunks = [], firstAt = null, songStart = null, handle = null, stopped = false, sr = 48000;
+   nudge slider fixes any remaining offset.
+   Music settings: echo cancellation, noise suppression and automatic gain are OFF. (Echo cancellation
+   treats singing over the backing as an echo and chops or mutes the voice.) Headphones keep the backing
+   out of the recording. The finished take is brought to a healthy level; a silent take is not kept. */
+const GUIDE_SILENT = 0.004;                 // a take quieter than this (peak) means the microphone heard nothing
+function guidePeak(pcm) { let p = 0; for (let i = 0; i < pcm.length; i++) { const v = Math.abs(pcm[i]); if (v > p) p = v; } return p; }
+/* bring a take up (or down) so its loudest moment sits at 0.9, never boosting more than 12x (to keep hiss low) */
+function guideNormalize(pcm) {
+  const peak = guidePeak(pcm); if (peak < 1e-6) return { pcm, peak, gain: 1 };
+  const gain = Math.min(12, 0.9 / peak); if (Math.abs(gain - 1) > 0.02) for (let i = 0; i < pcm.length; i++) pcm[i] *= gain;
+  return { pcm, peak, gain };
+}
+async function listMics() {
+  try { const d = await navigator.mediaDevices.enumerateDevices(); return d.filter(x => x.kind === 'audioinput'); } catch (e) { return []; }
+}
+function micConstraints(deviceId) {
+  const a = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 };
+  if (deviceId) a.deviceId = { exact: deviceId };
+  return { audio: a };
+}
+async function openMic(deviceId) {
+  try { return await navigator.mediaDevices.getUserMedia(micConstraints(deviceId)); }
+  catch (e) { if (deviceId) return navigator.mediaDevices.getUserMedia(micConstraints(null)); throw e; }   // the chosen microphone was unplugged: use the default one
+}
+const MIC_HELP = 'Check that the microphone is plugged in and chosen above, and in Windows: Settings > Privacy & security > Microphone, turn on "Let desktop apps access your microphone". Also check Settings > System > Sound > Input that the right microphone is selected and its volume is up.';
+function startGuideRecording(P, onState, opts) {
+  opts = opts || {};
+  let stream = null, node = null, src = null, chunks = [], firstAt = null, songStart = null, handle = null, stopped = false, sr = 48000, maxPeak = 0;
   const finish = async () => {
     if (stopped) return; stopped = true;
     try { if (node) node.disconnect(); if (src) src.disconnect(); } catch (e) { /* ignore */ }
     if (stream) stream.getTracks().forEach(t => t.stop());
     if (handle) handle.stop();
     if (!chunks.length || songStart === null) { onState({ state: 'empty' }); return; }
+    if (maxPeak < GUIDE_SILENT) { onState({ state: 'silent', msg: 'The microphone did not pick up any sound, so nothing was saved' + (P.guide ? ' (your earlier guide track is kept)' : '') + '. ' + MIC_HELP }); return; }
     const total = chunks.reduce((a, c) => a + c.length, 0), all = new Float32Array(total); let o = 0; chunks.forEach(c => { all.set(c, o); o += c.length; });
     const shift = Math.round((songStart - firstAt + (S.prefs.latencyMs || 0) / 1000) * sr);
     let pcm;
-    if (shift >= 0) pcm = all.subarray(Math.min(shift, all.length));
+    if (shift >= 0) pcm = all.slice(Math.min(shift, all.length));
     else { pcm = new Float32Array(all.length - shift); pcm.set(all, -shift); }   // the microphone started late: pad the start with silence
+    const n = guideNormalize(pcm);
     const tmp = { length: pcm.length, sampleRate: sr, numberOfChannels: 1, getChannelData: () => pcm };
     const blob = new Blob([encodeWav(tmp)], { type: 'audio/wav' });
     await GuideStore.put(P.id, blob);
     P.guide = { at: Date.now(), dur: Math.round(pcm.length / sr), gain: (P.guide && P.guide.gain) || 1, nudgeMs: 0 };
-    touch(); onState({ state: 'saved', seconds: P.guide.dur });
+    touch(); onState({ state: 'saved', seconds: P.guide.dur, quiet: n.peak < 0.05, boost: n.gain });
   };
   (async () => {
-    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: true } }); }
-    catch (e) { onState({ state: 'error', msg: 'The microphone could not be opened. Check that it is connected and that no other program is using it.' }); return; }
+    try { stream = await openMic(opts.deviceId); }
+    catch (e) { stopped = true; onState({ state: 'error', msg: 'The microphone could not be opened. ' + MIC_HELP }); return; }
     const c = Snd.ensure(); sr = c.sampleRate;
     src = c.createMediaStreamSource(stream);
     node = c.createScriptProcessor(4096, 1, 1);
@@ -211,13 +238,29 @@ function startGuideRecording(P, onState) {
       if (stopped) return;
       const at = e.playbackTime - e.inputBuffer.length / sr;
       if (firstAt === null) firstAt = at;
-      chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+      const d = new Float32Array(e.inputBuffer.getChannelData(0));
+      chunks.push(d);
+      const pk = guidePeak(d); if (pk > maxPeak) maxPeak = pk;
+      onState({ state: 'level', peak: pk });
       e.outputBuffer.getChannelData(0).fill(0);
     };
     const silent = c.createGain(); silent.gain.value = 0; src.connect(node); node.connect(silent); silent.connect(c.destination);
     const A = arrangeSong(P, { melInst: Snd.inst() });
-    onState({ state: 'recording' });
+    onState({ state: 'recording', label: (stream.getAudioTracks()[0] || {}).label || '' });
     handle = Snd.play(A.script, { force: true, inst: () => Snd.backingInst(), onStart: t => { songStart = t; }, onEnd: () => finish() });
   })();
   return { stop: finish };
+}
+/* a short microphone check: shows the level for a few seconds, records nothing */
+function testMic(deviceId, onLevel, ms) {
+  let stream = null, raf = null, ctxN = null, done = false, peakAll = 0;
+  const stop = () => { if (done) return; done = true; cancelAnimationFrame(raf); try { if (ctxN) ctxN.disconnect(); } catch (e) { /* ignore */ } if (stream) stream.getTracks().forEach(t => t.stop()); onLevel(null, peakAll); };
+  (async () => {
+    try { stream = await openMic(deviceId); } catch (e) { done = true; onLevel(-1, 0); return; }
+    const c = Snd.ensure(); const an = c.createAnalyser(); an.fftSize = 2048; ctxN = c.createMediaStreamSource(stream); ctxN.connect(an);
+    const buf = new Float32Array(an.fftSize), t0 = performance.now();
+    const loop = () => { if (done) return; an.getFloatTimeDomainData(buf); const p = guidePeak(buf); if (p > peakAll) peakAll = p; onLevel(p, peakAll); if (performance.now() - t0 > (ms || 5000)) stop(); else raf = requestAnimationFrame(loop); };
+    loop();
+  })();
+  return { stop };
 }

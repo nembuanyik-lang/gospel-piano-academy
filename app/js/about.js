@@ -1,8 +1,20 @@
 'use strict';
 /* ---------------------------------------------------------------- version, what's new, credits
    APP_VERSION must match "version" in package.json (a unit test checks this). */
-const APP_VERSION = '2.2.0';
+const APP_VERSION = '2.3.0';
 const CHANGES = [
+  { v: '2.3.0', title: 'At your piano', items: [
+    'Every piano lesson now has a 20-minute routine for your own piano or keyboard: a warm-up, four focused blocks written for that lesson, and a close where you play it as music.',
+    'A timer walks you through the blocks with a chime between them, with a metronome beside it. The time counts as practice even while you are away from the computer.',
+    'Find it as the "At your piano" step in each lesson, or start it from Today\'s practice on Home.',
+    'Fixed: in many chord exercises the on-screen keyboard was too short, so some chord notes could not be clicked. The keyboard now always stretches to fit every chord.'
+  ] },
+  { v: '2.2.1', title: 'Clearer guide recordings', items: [
+    'Song Lab guide tracks now record with music settings: the voice is no longer chopped or muted by echo cancellation while the backing plays.',
+    'Choose which microphone to use, test it first, and watch a level bar while you record.',
+    'Quiet recordings are brought up to a good level automatically. If the microphone heard nothing, you are told how to fix it and your earlier guide is kept.',
+    'Listen to the guide track on its own.'
+  ] },
   { v: '2.2.0', title: 'The Song Lab studio', items: [
     'Every section of a song (intro, verse, pre-chorus, chorus, bridge, outro) now has its own chords, up to eight, with one, two or half a bar per chord.',
     'A melody for each section, as long as the section. Notes keep the length you hold them, earlier takes are kept, and a note editor lets you fix any note.',
