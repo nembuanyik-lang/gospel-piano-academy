@@ -21,7 +21,8 @@ function defaults() {
     prefs: { names: true, sound: true, speed: 'normal', dailyMin: 10 },
     testouts: {}, scores: [], today: { date: '', items: {}, goalMet: false },
     sprint: { note: 0, chord: 0 }, recommend: {}, events: {},
-    review: {}, routines: {}, songbook: {}, sight: { level: 1, sessions: 0, notes: 0, correct: 0, best: 0 }
+    review: {}, routines: {}, songbook: {}, sight: { level: 1, sessions: 0, notes: 0, correct: 0, best: 0 },
+    gear: { level: 1, total: 0, correct: 0, best: 1, hist: [], last: '' }, licks: {}
   };
 }
 function mergeState(base, src) {

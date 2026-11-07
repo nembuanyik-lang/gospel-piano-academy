@@ -100,3 +100,59 @@ test('MIDI keyboards are allowed under both permission names (recent Chromium as
   assert.match(src, /setPermissionRequestHandler[\s\S]*permission === 'midi' \|\| permission === 'midiSysex'\) return cb\(true\)/);
   assert.match(src, /setPermissionCheckHandler[\s\S]*permission === 'midi' \|\| permission === 'midiSysex'\) return true/);
 });
+
+test('the release build downloads the recorded piano (retries, skips missing files, writes the manifest)', async () => {
+  const http = require('http');
+  const { download, haveSamples, NAMES } = require('../scripts/get-piano-samples.js');
+  let hits = 0;
+  const srv = http.createServer((req, res) => {
+    hits++;
+    if (req.url.includes('C8')) { res.statusCode = 404; return res.end(); }               // one note missing
+    if (req.url.includes('A0') && hits < 3) { res.statusCode = 503; return res.end(); }    // a flaky first try
+    res.end(Buffer.alloc(4000, 7));
+  });
+  await new Promise(r => srv.listen(0, r));
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'gma-smp-'));
+  try {
+    assert.equal(haveSamples(dest), false);
+    const n = await download({ base: 'http://localhost:' + srv.address().port + '/', dest, quiet: true });
+    assert.equal(n, NAMES.length - 1);
+    const man = JSON.parse(fs.readFileSync(path.join(dest, 'manifest.json'), 'utf8'));
+    assert.ok(man.notes.A0 && !man.notes.C8 && /Salamander/.test(man.credit));
+    assert.equal(haveSamples(dest), true);
+  } finally { srv.close(); }
+});
+
+test('the release build downloads the instrument library (skips a mirror that returns a web page, checks the file)', async () => {
+  const http = require('http');
+  const { download, haveSounds, isSoundFont, FILE } = require('../scripts/get-sounds.js');
+  const sf = require('./fixtures/make-sf2.js').build();
+  assert.ok(isSoundFont(sf) && !isSoundFont(Buffer.from('<html>not found</html>')));
+  const srv = http.createServer((req, res) => {
+    if (req.url === '/a.sf2') { res.setHeader('content-type', 'text/html'); return res.end('<!doctype html><title>Moved</title>'); } // a web page, not the file
+    if (req.url === '/b.sf2') { res.statusCode = 404; return res.end(); }
+    res.end(sf);
+  });
+  await new Promise(r => srv.listen(0, r));
+  const base = 'http://localhost:' + srv.address().port;
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'gma-snd-'));
+  try {
+    assert.equal(haveSounds(dest), false);
+    const ok = await download({ urls: [base + '/a.sf2', base + '/b.sf2', base + '/c.sf2'], dest, minBytes: 1000, tries: 1, quiet: true });
+    assert.equal(ok, true);
+    const man = JSON.parse(fs.readFileSync(path.join(dest, 'manifest.json'), 'utf8'));
+    assert.equal(man.file, FILE); assert.match(man.credit, /GeneralUser GS/);
+    assert.equal(fs.readFileSync(path.join(dest, FILE)).length, sf.length);
+    // a file that is too small is refused (a truncated download)
+    const dest2 = fs.mkdtempSync(path.join(os.tmpdir(), 'gma-snd-'));
+    assert.equal(await download({ urls: [base + '/c.sf2'], dest: dest2, minBytes: sf.length + 1, tries: 1, quiet: true }), false);
+    assert.equal(fs.existsSync(path.join(dest2, 'manifest.json')), false);
+  } finally { srv.close(); }
+});
+
+test('the app loads the SoundFont player before the sound engine, and the build fetches the library', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'app', 'index.html'), 'utf8');
+  assert.ok(html.indexOf('js/sf2.js') > 0 && html.indexOf('js/sf2.js') < html.indexOf('js/audio.js'));
+  const prep = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'prepare.js'), 'utf8');
+  assert.match(prep, /get-sounds\.js[\s\S]*GITHUB_ACTIONS/);
+});

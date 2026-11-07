@@ -31,10 +31,12 @@ const ACTIONS = {
   signoff: el => doSignoff(el.dataset.id),
   cclear: () => { ui.courseQ = ''; ui.courseUnfinished = false; render(); },
   pexport: () => exportProgress(),
+  leslie: () => Snd.leslie(!Snd.leslieFast()),
   saveretry: () => saveNow(),
   copyerr: () => { const t = lastError ? (lastError.stack || lastError.message) : ''; try { navigator.clipboard.writeText('Gospel Music Academy\n' + navigator.userAgent + '\n' + t).then(() => toast('Details copied.'), () => toast('Could not copy.', 'warn')); } catch (e) { toast('Could not copy.', 'warn'); } },
   undoimport: () => undoImport(),
   snaprestore: el => restoreSnapshot(el.dataset.id),
+  obrestore: () => { ui.skipOnboarding = true; go('profile', { tab: 'data' }); },
   pimportpick: () => { const f = $('#pimportfile'); if (f) f.click(); },
   pimportapply: () => applyImport(),
   pimportcancel: () => { ui.importPending = null; ui.importMsg = ''; render(); },
@@ -51,7 +53,7 @@ const ACTIONS = {
   toglevel: el => { const id = el.dataset.id; const cur = ui.courseOpen[id]; const nl = nextLesson(); const dflt = id === (nl ? C.byId[nl].level : 'G'); ui.courseOpen[id] = cur === undefined ? !dflt : !cur; render(); },
   testout: el => openTestout(el.dataset.id),
   toplay: () => { ui.testout.stage = 'play'; ui.testout.ex = 0; render(); },
-  pview: el => go('practice', { view: el.dataset.view, type: el.dataset.type, kind: el.dataset.kind, sid: el.dataset.sid, proj: el.dataset.proj }),
+  pview: el => go('practice', { view: el.dataset.view, type: el.dataset.type, kind: el.dataset.kind, sid: el.dataset.sid, proj: el.dataset.proj, id: el.dataset.id }),
   /* onboarding */
   obnext: () => {
     const ob = ui.onboarding;
@@ -91,6 +93,7 @@ const ACTIONS = {
   slundo: () => { sl.pid = 'custom'; sl.degs.pop(); if (!sl.degs.length) sl.degs = [1]; render(); },
   slclear: () => { sl.pid = 'custom'; sl.degs = [1]; render(); },
   slnew: () => newProject(),
+  slpkgopen: () => { const f = $('#pkgfile'); if (f) f.click(); },
   openproj: el => go('song', { pid: el.dataset.id }),
   padd: el => { const P = curProj(); if (P.degs.length >= 4) { toast('A four-chord progression has four chords. Remove one to change it.'); return; } P.degs.push(+el.dataset.d); P.steps.prog = false; touch(); render(); },
   pundo: () => { const P = curProj(); P.degs.pop(); P.steps.prog = false; touch(); render(); },
@@ -134,6 +137,15 @@ const ACTIONS = {
 };
 const curProj = () => S.songs.find(s => s.id === (route.params || {}).pid);
 const BINDS = {
+  slpkg: async el => {
+    const f = el.files && el.files[0]; el.value = ''; if (!f) return;
+    const info = $('#pkginfo'); if (info) info.textContent = 'Opening ' + f.name + '…';
+    try {
+      const r = await importPackage(new Uint8Array(await f.arrayBuffer()));
+      toast('Opened "' + r.P.title + '" with ' + r.stored + ' recordings and loops.');
+      go('song', { pid: r.P.id });
+    } catch (e) { if (info) info.textContent = f.name + ' could not be opened: ' + (e && e.message ? e.message : e) + '.'; }
+  },
   resettext: el => { ui.resetText = el.value; const b = $('#resetbtn'); if (b) b.disabled = el.value.trim().toUpperCase() !== 'RESET'; },
   classfiles: el => { const f = el.files; readClassFiles(f); el.value = ''; },
   csearch: el => { ui.courseQ = el.value; const box = $('#cresults'); if (box) box.innerHTML = el.dataset.kind === 'guitar' ? guitarCourseBody() : pianoCourseBody(); },
@@ -158,14 +170,16 @@ const BINDS = {
   pname: el => { S.profile.name = el.value; touch(); chrome(); },
   pimport: el => { const f = el.files && el.files[0]; el.value = ''; readBackupFile(f); },
   pnames: el => { S.prefs.names = el.checked; touch(); },
-  instpick: el => { S.prefs.instrument = Snd.hasInst(el.value) ? el.value : 'piano'; touch(); Snd.releaseAll(); Snd.preview(); },
+  instpick: el => { S.prefs.instrument = Snd.hasInst(el.value) ? el.value : 'piano'; touch(); Snd.releaseAll(); Snd.preview(); refreshLeslieBtn(); },
+  memsaver: el => { S.prefs.memSaver = ['auto', 'on', 'off'].includes(el.value) ? el.value : 'auto'; touch(); },
+  roompick: el => { Snd.setRoom(el.value); touch(); Snd.preview(); },
   psound: el => { S.prefs.sound = el.checked; touch(); },
   pslow: el => { S.prefs.speed = el.checked ? 'slow' : 'normal'; touch(); }
 };
-const LIVE = new Set(['pbpm', 'pswing', 'pguidegain', 'pguidenudge', 'resettext', 'csearch', 'slbpm', 'ptitle', 'lchorus', 'lverse', 'lbridge', 'obname', 'pname']);
+const LIVE = new Set(['pbpm', 'pswing', 'pguidegain', 'pguidenudge', 'mxvol', 'mxpan', 'pinfo', 'plgain', 'ploff', 'resettext', 'csearch', 'slbpm', 'ptitle', 'lchorus', 'lverse', 'lbridge', 'obname', 'pname']);
 /* the song project studio brings its own actions and bindings (views-project.js) */
-Object.assign(ACTIONS, PROJECT_ACTIONS, VOICE_ACTIONS);
-Object.assign(BINDS, PROJECT_BINDS);
+Object.assign(ACTIONS, PROJECT_ACTIONS, VOICE_ACTIONS, GOSPEL_ACTIONS);
+Object.assign(BINDS, PROJECT_BINDS, GOSPEL_BINDS);
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]'); if (!el || el.disabled) return;
   const fn = ACTIONS[el.dataset.act]; if (fn) { e.preventDefault(); fn(el, e); }
@@ -199,6 +213,8 @@ function boot() {
   Store.init();
   Midi.onChange = () => { if (route && (route.name === 'profile' || route.name === 'lab')) render(); };
   if (S.prefs.midi && Midi.supported) Midi.connect();
+  // load the recorded piano now, so the first notes you play already use it (not the stand-in synthesised piano)
+  setTimeout(() => { try { Snd.ensure(); } catch (e) { /* sound starts on the first note instead */ } }, 300);
   if (Desk) Desk.onNavigate(where => { if (where === 'about' || where === 'settings') go('profile', { tab: where }); });
   // test and debugging hook: only in the browser build, never in the desktop app
   if (!Desk) window.__gpa = { Store, Snap, restoreSnapshot, Midi, S: () => S, go, ui, lab, sl, E, C, Input, Snd, Piano, mountExercise, lessonStatus, isUnlocked, evalLesson, route: () => route, ACTIONS, render };

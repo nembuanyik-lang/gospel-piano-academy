@@ -584,3 +584,68 @@ input[type="range"] { width: 100%; accent-color: var(--accent); min-height: 32px
 .vx-best, .vx-recent { list-style: none; padding: 0; margin: 0; }
 .vx-best li, .vx-recent li { display: flex; justify-content: space-between; gap: 1rem; padding: .35rem 0; border-bottom: 1px solid var(--line); }
 @media (max-width: 560px) { .vx-read b { font-size: 2rem; } .vx-trace { height: 160px; } }
+
+/* How it works panels */
+.howto { margin: .8rem 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.howto summary { cursor: pointer; padding: .6rem .8rem; font-weight: 600; display: flex; align-items: center; gap: .5rem; list-style: none; }
+.howto summary::-webkit-details-marker { display: none; }
+.howto summary::after { content: '▾'; margin-left: auto; color: var(--muted); transition: transform .15s; }
+.howto:not([open]) summary::after { transform: rotate(-90deg); }
+.howto ol { margin: 0; padding: 0 1rem .8rem 2.2rem; }
+.howto li { margin: .3rem 0; line-height: 1.45; }
+.dalt { min-height: 1.2em; color: var(--muted); }
+.dnotes { display: flex; flex-wrap: wrap; gap: .4rem; justify-content: center; margin-top: .3rem; }
+.dnotes .mono { padding: .1rem .45rem; border-radius: 6px; background: var(--line); }
+.vx-phase { text-align: center; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: .55rem; border-radius: 10px; background: var(--line); color: var(--muted); transition: background .15s; }
+.vx-phase[data-p="listen"] { background: var(--accent-soft); color: var(--accent); }
+.vx-phase[data-p="sing"] { background: var(--ok); color: #fff; }
+.vx-level { height: 6px; width: 140px; margin-top: .45rem; border-radius: 3px; background: var(--line); overflow: hidden; }
+.vx-level i { display: block; height: 100%; width: 0; background: var(--ok); transition: width .06s linear; }
+.vx-intro ol { padding-left: 1.3rem; } .vx-intro li { margin: .3rem 0; line-height: 1.45; }
+.btn.leslie { margin-top: .4rem; }
+.btn.leslie.on { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
+.roll .rly { fill: #fff; font-size: 9px; font-weight: 600; pointer-events: none; }
+.cstrip { display: flex; flex-wrap: wrap; gap: .35rem; margin: .6rem 0; }
+.cchord { position: relative; flex: 1 1 0; min-width: 4.6rem; display: flex; flex-direction: column; align-items: flex-start; gap: .1rem; padding: .45rem .6rem; border: 1px solid var(--line); border-radius: 10px; background: var(--card, transparent); color: inherit; text-align: left; cursor: pointer; font: inherit; }
+.cchord b { font: 700 1.05rem ui-monospace, Consolas, monospace; }
+.cchord span { font-size: .85rem; opacity: .8; }
+.cchord small { font-size: .75rem; opacity: .7; }
+.cchord.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.cchord.push { border-left: 4px solid var(--accent); }
+.cchord .pushmark { position: absolute; left: -.55rem; top: 35%; font-style: normal; font-weight: 800; color: var(--accent); }
+.ceditor { border: 1px dashed var(--line); border-radius: 12px; padding: .7rem .8rem; margin: .4rem 0 .8rem; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .6rem; }
+.grid4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .5rem; }
+.formlist { padding-left: 0; list-style: none; }
+.formrow { border: 1px solid var(--line); border-radius: 12px; padding: .55rem .7rem; margin: 0 0 .5rem; }
+details.colours { margin: .4rem 0 .8rem; }
+details.colours summary { cursor: pointer; font-weight: 600; }
+.studiosteps { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: .8rem; margin: .6rem 0; }
+.studiosteps > div { border: 1px solid var(--line); border-radius: 12px; padding: .6rem .75rem; }
+.takes { list-style: none; padding: 0; margin: .3rem 0 .8rem; }
+.takes li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .4rem; border: 1px solid var(--line); border-radius: 10px; padding: .4rem .6rem; margin-bottom: .35rem; }
+.takes li.on { border-color: var(--accent); }
+.compgrid { display: grid; gap: 2px; overflow-x: auto; margin: .4rem 0 .6rem; }
+.compgrid > div { display: grid; grid-template-columns: minmax(9rem, 1.6fr) repeat(7, minmax(3.2rem, 1fr)); align-items: center; }
+.compgrid span { padding: .15rem .3rem; font-size: .85rem; }
+.compcell { border: 1px solid var(--line); background: transparent; color: inherit; border-radius: 8px; min-width: 2.6rem; min-height: 2rem; cursor: pointer; font: inherit; }
+.compcell.on { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
+.looplist { list-style: none; padding: 0; margin: .5rem 0; }
+.looprow { border: 1px solid var(--line); border-radius: 12px; padding: .55rem .7rem; margin-bottom: .5rem; }
+.looprow.muted { opacity: .6; }
+.looprow input[type=number] { width: 6rem; }
+.chips label.chip { cursor: pointer; }
+.chips label.chip input { margin-right: .25rem; }
+.strips { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .5rem; margin: .5rem 0 .8rem; }
+.strip { border: 1px solid var(--line); border-radius: 12px; padding: .5rem .6rem; display: flex; flex-direction: column; gap: .25rem; }
+.strip > b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.strip.muted, .strip.dimmed { opacity: .55; }
+.strip .mute.on { background: var(--accent); color: var(--accent-fg); }
+.strip .solo.on { background: var(--gold, #c8902a); color: #111; }
+.miclevel.master { height: 14px; }
+.trackbar { margin: .4rem 0 .6rem; }
+.lessonrow { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: .6rem; padding: .6rem .7rem; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; margin-bottom: .35rem; }
+.lessonrow:hover { border-color: var(--accent); }
+.options { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: .5rem; margin: .8rem 0; }
+.btn.opt.ok { background: var(--ok, #2e7d4f); color: #fff; }
+.btn.opt.bad { background: var(--bad, #a8323e); color: #fff; }

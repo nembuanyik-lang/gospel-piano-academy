@@ -52,7 +52,7 @@ const Pitch = (() => {
      (midi null when no clear pitch). Uses music settings: no echo cancellation, no automatic gain. */
   function track(onFrame, opts) {
     opts = opts || {};
-    let stream = null, src = null, an = null, raf = null, stopped = false, hist = [];
+    let stream = null, src = null, an = null, raf = null, stopped = false, hist = [], gate = opts.gate || 0.008, lastStable = null, jumps = 0;
     const ctx = Snd.ensure();
     const loop = () => {
       if (stopped) return;
@@ -61,7 +61,7 @@ const Pitch = (() => {
       const buf = new Float32Array(an.fftSize); an.getFloatTimeDomainData(buf);
       const lvl = rms(buf), t = ctx.currentTime;
       let midi = null, hz = null, clarity = 0;
-      if (lvl > (opts.gate || 0.008)) {
+      if (lvl > gate) {
         const r = yin(buf, ctx.sampleRate);
         if (r && r.clarity > 0.8) { hz = r.hz; clarity = r.clarity; midi = hzToMidi(hz); }
       }
@@ -70,6 +70,10 @@ const Pitch = (() => {
       // median of the last frames: removes single-frame octave slips; needs 3 of 5 voiced frames
       const sm = valid.length >= 3 && midi !== null ? median(valid) : null;
       if (sm !== null && Math.abs(sm - midi) > 1) midi = sm;
+      // a lone octave jump (a common pitch-tracking slip) is replaced by the note just before it
+      // (only for a moment: a real leap of an octave, held for three frames or more, is accepted)
+      if (midi !== null && lastStable !== null && Math.abs(Math.abs(midi - lastStable) - 12) < 0.6 && jumps < 3) { jumps++; midi = lastStable; }
+      else { jumps = 0; lastStable = midi; }
       onFrame({ midi, hz: midi === null ? null : midiToHz(midi), clarity, level: lvl, t });
     };
     (async () => {
@@ -82,6 +86,7 @@ const Pitch = (() => {
     })();
     loop();
     return {
+      setGate(g) { gate = g; },
       stop() { stopped = true; cancelAnimationFrame(raf); try { if (src) src.disconnect(); } catch (e) { /* ignore */ } if (stream) stream.getTracks().forEach(tr => tr.stop()); }
     };
   }

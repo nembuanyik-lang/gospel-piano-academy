@@ -1,7 +1,7 @@
 {
   "name": "gospel-piano-academy",
   "productName": "Gospel Music Academy",
-  "version": "2.6.1",
+  "version": "2.9.0",
   "description": "Gospel Music Academy - learn gospel piano and guitar, desktop edition",
   "main": "main.js",
   "author": "Gospel Music Academy",
@@ -16,12 +16,14 @@
     "start": "npm run prepare-fonts && electron .",
     "check": "node scripts/check.js",
     "test": "node --test tests/unit.test.js tests/main.test.js",
-    "e2e": "node --test tests/e2e/app.test.js tests/e2e/mic.test.js tests/e2e/voice.test.js",
+    "stress": "node --test tests/e2e/stress.test.js",
+    "e2e": "node --test tests/e2e/app.test.js tests/e2e/mic.test.js tests/e2e/voice.test.js tests/e2e/sound.test.js tests/e2e/songlab.test.js tests/e2e/studio.test.js tests/e2e/loops.test.js tests/e2e/finish.test.js tests/e2e/gospel.test.js tests/e2e/desktop.test.js tests/e2e/upgrade.test.js",
     "dist": "npm run check && node scripts/prepare.js --strict && electron-builder",
     "dist:win": "npm run check && node scripts/prepare.js --strict && electron-builder --win",
     "dist:mac": "npm run check && node scripts/prepare.js --strict && electron-builder --mac",
     "dist:linux": "npm run check && node scripts/prepare.js --strict && electron-builder --linux",
-    "get-samples": "node scripts/get-piano-samples.js"
+    "get-samples": "node scripts/get-piano-samples.js",
+    "get-sounds": "node scripts/get-sounds.js"
   },
   "dependencies": {
     "electron-updater": "^6.3.0"
@@ -32,6 +34,7 @@
     "@fontsource/ibm-plex-mono": "latest",
     "electron": "latest",
     "electron-builder": "latest",
+    "lamejs": "1.2.1",
     "playwright": "latest"
   },
   "build": {

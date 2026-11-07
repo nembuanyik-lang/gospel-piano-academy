@@ -21,6 +21,7 @@ const IC = {
   star: '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
   flame: '<path d="M12 3c1 3 5 5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 1-9z"/>',
   mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   x: '<path d="M6 6l12 12M18 6L6 18"/>'
 };
@@ -145,7 +146,7 @@ const Staff = (function () {
     const xStart = x, xEnd = xStart + Math.max(1, cols.length) * colW;
     let top = Infinity, bot = -Infinity;
     staves.forEach(c => { LINES[c].forEach(d => { top = Math.min(top, y(d)); bot = Math.max(bot, y(d)); }); });
-    const body = [], ledgers = [], stems = [], labels = [], barXs = [];
+    const body = [], ledgers = [], stems = [], labels = [], barXs = [], heads = [], lyrics = [];
     const pitchAcc = {};                              // letter+octave -> accidental currently in effect
     cols.forEach((col, ci) => {
       const cx = xStart + ci * colW + colW / 2;
@@ -159,6 +160,7 @@ const Staff = (function () {
       }
       const ns = col.notes.map(parse).filter(Boolean).sort((a, b) => a.d - b.d);
       if (!ns.length) return;
+      if (col.lyric) lyrics.push([cx, col.lyric]);
       ns.forEach(n => { n.staff = clefOf(mode, n.midi); n.y = y(n.d); top = Math.min(top, n.y - 6); bot = Math.max(bot, n.y + 6); });
       // stem direction from the average position relative to the middle line of the staff they belong to
       const avgMid = ns.reduce((a, n) => a + (n.d - (n.staff === 'treble' ? 34 : 22)), 0) / ns.length;
@@ -200,8 +202,11 @@ const Staff = (function () {
         top = Math.min(top, y2c - 2); bot = Math.max(bot, y2c + 2);
         if (dur === 'e') g += '<path class="st-flag" d="M ' + num(sx) + ' ' + num(y2c) + ' C ' + num(sx + 1) + ' ' + num(y2c + (up ? 8 : -8)) + ' ' + num(sx + 10) + ' ' + num(y2c + (up ? 10 : -10)) + ' ' + num(sx + 7) + ' ' + num(y2c + (up ? 20 : -20)) + '" fill="none" stroke="currentColor" stroke-width="1.8"/>';
       }
+      heads[ci] = { cx, y: ns[0].y, up, tie: !!col.tie };
       body.push('<g class="st-col' + st + '">' + g + '</g>');
     });
+    // ties: a curve from a note to the same note in the next column
+    heads.forEach((h, ci) => { const n = heads[ci + 1]; if (!h || !h.tie || !n) return; const yy = h.up ? Math.max(h.y, n.y) + 7 : Math.min(h.y, n.y) - 7, dy = h.up ? 6 : -6; ledgers.push(null); stems.push('<path class="st-tie" d="M ' + num(h.cx + 4) + ' ' + num(yy) + ' Q ' + num((h.cx + n.cx) / 2) + ' ' + num(yy + dy) + ' ' + num(n.cx - 4) + ' ' + num(yy) + '" fill="none" stroke="currentColor" stroke-width="1.3"/>'); bot = Math.max(bot, yy + dy); top = Math.min(top, yy + dy); });
     // draw: staff lines
     let svg = '';
     staves.forEach(c => { LINES[c].forEach(d => { svg += '<line class="st-line" x1="' + num(6) + '" y1="' + num(y(d)) + '" x2="' + num(xEnd + 8) + '" y2="' + num(y(d)) + '" stroke="currentColor" stroke-width="1" opacity=".75"/>'; }); });
@@ -223,13 +228,18 @@ const Staff = (function () {
           '<text class="st-time" x="' + num(timeX) + '" y="' + num(mid + 15) + '" text-anchor="middle" font-size="19" font-weight="800" fill="currentColor" font-family="Georgia, serif">' + opts.time[1] + '</text>';
       }
     });
-    ledgers.forEach(([lx, ly]) => { svg += '<line class="st-ledger" x1="' + num(lx - 9) + '" y1="' + num(ly) + '" x2="' + num(lx + 9) + '" y2="' + num(ly) + '" stroke="currentColor" stroke-width="1.2"/>'; });
+    ledgers.filter(Boolean).forEach(([lx, ly]) => { svg += '<line class="st-ledger" x1="' + num(lx - 9) + '" y1="' + num(ly) + '" x2="' + num(lx + 9) + '" y2="' + num(ly) + '" stroke="currentColor" stroke-width="1.2"/>'; });
     svg += stems.join('') + body.join('');
     barXs.forEach(bx => { svg += '<line class="st-bar" x1="' + num(bx) + '" y1="' + num(sTop) + '" x2="' + num(bx) + '" y2="' + num(sBot) + '" stroke="currentColor" stroke-width="1.3"/>'; });
     if (labels.length) {
       const labY = Math.min(sTop - 16, top - 8);
       labels.forEach(l => { svg += '<text class="st-chord" x="' + num(l[0]) + '" y="' + num(labY) + '" text-anchor="middle" font-size="15" font-weight="700" fill="currentColor" font-family="ui-monospace, Menlo, Consolas, monospace">' + esc(l[1]) + '</text>'; });
       top = Math.min(top, labY - 16);
+    }
+    if (lyrics.length) {   // words under the staff, one syllable under each note
+      const lyY = Math.max(bot, sBot) + 18;
+      lyrics.forEach(l => { svg += '<text class="st-lyric" x="' + num(l[0]) + '" y="' + num(lyY) + '" text-anchor="middle" font-size="12.5" fill="currentColor" font-family="Georgia, serif">' + esc(l[1]) + '</text>'; });
+      bot = lyY + 5;
     }
     const padT = 8, padB = 8, minY = Math.min(top, sTop) - padT, maxY = Math.max(bot, sBot) + padB;
     const W = xEnd + 18, H = maxY - minY;

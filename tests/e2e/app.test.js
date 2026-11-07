@@ -294,13 +294,14 @@ test('song lab: the audio export is a real WAV of the right length with sound in
   const { page, errors } = await open({ acceptDownloads: true });
   await makeSong(page);
   await page.evaluate(() => { const g = window.__gpa, P = g.S().songs[g.S().songs.length - 1]; P.structure = ['Verse', 'Chorus']; g.render(); });
-  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 120000 }), page.click('[data-act=pwav][data-mix=full]')]);
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 120000 }), page.click('[data-act=pexp][data-format=wav]')]);
   const buf = require('fs').readFileSync(await dl.path());
   assert.equal(buf.toString('latin1', 0, 4), 'RIFF'); assert.equal(buf.toString('latin1', 8, 12), 'WAVE');
-  const ch = buf.readUInt16LE(22), sr = buf.readUInt32LE(24), bytes = buf.readUInt32LE(40), secs = bytes / (sr * ch * 2);
+  const ch = buf.readUInt16LE(22), sr = buf.readUInt32LE(24), bits = buf.readUInt16LE(34), bytes = buf.readUInt32LE(40), secs = bytes / (sr * ch * bits / 8);
+  assert.equal(bits, 24, 'the finished song is a 24-bit master');
   assert.equal(ch, 2); assert.equal(sr, 44100);
   assert.ok(secs > 24 && secs < 29, '48 beats at 120 BPM is 24 seconds plus the tail, got ' + secs);
-  let sum = 0, n = 0; for (let o = 44; o < buf.length; o += 2 * 400) { const v = buf.readInt16LE(o) / 32768; sum += v * v; n++; }
+  let sum = 0, n = 0; for (let o = 44; o + 3 < 44 + bytes; o += 3 * 401) { const v = buf.readIntLE(o, 3) / 8388608; sum += v * v; n++; }
   assert.ok(Math.sqrt(sum / n) > 0.01, 'the file is not silent');
   assert.deepEqual(errors, []);
 });
@@ -530,14 +531,13 @@ test('2.5.0 with a keyboard: routines listen, My keyboard adapts them, chords ar
     g.go('song'); g.ACTIONS.slnew(); await wait(50);
     const P = S.songs[0]; P.key = 'C'; g.go('song', { pid: P.id }); await wait(50);
     out.playThrough = !!document.querySelector('[data-bind=pkbdout]');
-    const before = P.sections[pst().sec].degs.length;
+    const before = P.sections[pst().sec].chords.length;
     document.querySelector('#pkbin').click(); await wait(50);
     const chord = async (...ms) => { ms.forEach(n => send(0x90, n, 100)); await wait(20); ms.forEach(n => send(0x80, n, 0)); await wait(60); };
     await chord(65, 69, 72);                 // F major: chord 4 in C
     await chord(57, 60, 64);                 // A minor: chord 6
     await chord(63, 67, 70);                 // E flat major: not in C
-    out.notInKey = document.querySelector('#pkbinfo').textContent;
-    out.added = S.songs[0].sections[pst().sec].degs.slice(before);
+    out.added = S.songs[0].sections[pst().sec].chords.slice(before).map(c => Songcraft.describe('C', c).name + ' ' + Songcraft.describe('C', c).number);
 
     // 4. the song plays through the keyboard: program change, chords on channel 2, bass on 3, then silence on stop
     S.prefs.kbdOut = { on: true, prog: 19 };
@@ -561,8 +561,49 @@ test('2.5.0 with a keyboard: routines listen, My keyboard adapts them, chords ar
   assert.equal(r.upVisible, true); assert.equal(r.bpmAfterUp, 65);
   assert.ok(r.log && r.log.n === 1 && r.log.hasPlayed && r.log.lastTiming >= 80, JSON.stringify(r.log));
   assert.equal(r.playThrough, true);
-  assert.deepEqual(r.added, [4, 6]); assert.match(r.notInKey, /not one of the seven chords/);
+  assert.deepEqual(r.added, ['F 4', 'Am 6m', 'E♭ ♭3'], 'any chord is accepted now, including the borrowed ♭III');
   assert.equal(r.prog, true); assert.ok(r.chordNotes > 0 && r.bassNotes > 0, JSON.stringify(r)); assert.equal(r.timestamped, true);
   assert.equal(r.silenced, true); assert.equal(r.test, true); assert.equal(r.testNotes, 4);
+  assert.deepEqual(errors, []);
+});
+
+test('the piano sound starts loading when the app opens, before the first note', async () => {
+  const { page, errors } = await open();
+  await page.waitForTimeout(1500);
+  const state = await page.evaluate(() => window.__gpa.Snd.info().state);
+  assert.notEqual(state, 'idle', 'samples began loading without a key press (no sample files in tests: "none")');
+  assert.deepEqual(errors, []);
+});
+
+test('Piano Lab: 61 keys, no sheet music, and the chord detector follows the chord you are holding', async () => {
+  const { page, errors } = await open();
+  await onboard(page);
+  const r = await page.evaluate(async () => {
+    const g = window.__gpa, wait = ms => new Promise(res => setTimeout(res, ms)), out = {};
+    g.go('lab'); await wait(100);
+    const keys = [...document.querySelectorAll('#labkb [data-m]')].map(k => +k.dataset.m);
+    out.lo = Math.min(...keys); out.hi = Math.max(...keys); out.count = keys.length;
+    out.staff = !!document.querySelector('#labstaff, .vstaff');
+    out.howto = !!document.querySelector('details.howto');
+    const on = ms => ms.forEach(m => g.Input.noteOn(m, 'midi', 0.8)), off = ms => ms.forEach(m => g.Input.noteOff(m));
+    const name = () => document.querySelector('#dchord').textContent;
+    on([60, 64, 67]); out.c = name();
+    off([60, 64, 67]); await wait(500); out.kept = name();
+    on([57, 60, 64]); out.am = name();                            // a new chord straight after: no old notes mixed in
+    off([57, 60, 64]); await wait(500);
+    on([43]); on([65, 69, 72]); out.fg = name(); out.alt = document.querySelector('#dalt').textContent;
+    off([43, 65, 69, 72]); await wait(500);
+    on([96]); out.top = document.querySelector('#labkb [data-m="96"]').classList.contains('on');
+    off([96]); await wait(500);
+    // Hold notes: clicked keys stay until clicked again
+    const hold = document.querySelector('#labhold'); hold.checked = true; hold.dispatchEvent(new Event('change'));
+    for (const m of [62, 65, 69]) { g.Input.noteOn(m, 'mouse', 0.8); g.Input.noteOff(m); await wait(600); }
+    out.held = name();
+    return out;
+  });
+  assert.deepEqual([r.lo, r.hi, r.count], [36, 96, 61]);
+  assert.equal(r.staff, false); assert.equal(r.howto, true);
+  assert.equal(r.c, 'C'); assert.equal(r.kept, 'C'); assert.equal(r.am, 'Am'); assert.equal(r.fg, 'F/G'); assert.match(r.alt, /G9sus4/);
+  assert.equal(r.top, true); assert.equal(r.held, 'Dm');
   assert.deepEqual(errors, []);
 });

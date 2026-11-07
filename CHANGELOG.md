@@ -1,5 +1,126 @@
 # Changelog
 
+## 2.9.0 — The Song Lab becomes a gospel writing room
+
+- `app/js/songcraft.js` (pure, Node-tested): song chords stored relative to the key `{ r, q, b, beats, push }` with
+  any `CHORD_TYPES` quality and an optional bass; names, Roman numerals and Nashville numbers spelled in any key;
+  the diatonic palette plus gospel colours (secondary dominants, borrowed iv/♭VII/♭VI/♭III, passing °7 chords,
+  slash chords, ♭II7); next-chord suggestions; voice-led right-hand voicings (root left to the bass in big chords);
+  `fromHit` for chords played on the keyboard (no chord is rejected any more); `framesToNotes` (sung pitch to
+  notes, half-beat grid, steady-note and syllable-dip splitting, optional pull to the key); `choirParts` (alto and
+  tenor on chord tones under the melody, smooth, thirds and sixths under passing notes); syllables for lyrics.
+- Studio: per-chord lengths and pushes (comping patterns follow the bar grid and play every change; kick and crash on
+  pushes), new comping styles (12/8 triplets, gospel ballad, shout stabs) and bass styles (gospel approach notes,
+  octave pump, makossa). The song form (`P.form`): repeats, key change with V7 lead-in, tags (last two bars), vamps,
+  band stop on the last bar, energy. Older projects migrate (`v: 3`), `degs`/`structure` stay in step for lessons
+  and the Songbook. Changing the time signature keeps bar-long chords a bar long.
+- Sing it in (Pitch tracker during the section's backing or the click only), words under the melody (shown in the
+  note editor), choir parts in playback, MIDI (Soprano/Alto/Tenor tracks) and rehearsal WAVs with one part forward.
+- Exports: lead sheet (staff with ties, chord symbols and syllables; key changes respelled), number chart and chord
+  chart (bars, pushes, form notes). Staff notation gained ties and lyrics.
+- Vocal studio (`app/js/vocalfx.js`, pure, plus `app/workers/vocalfx-worker.js`): 4th-order low-cut, STFT spectral
+  noise reduction (profile from the room check, or the take's quietest frames), RBJ EQ, soft-knee compressor with
+  make-up, zero-phase split-band de-esser, limiter, the app's modelled room (OfflineAudioContext); presets Natural,
+  Worship lead, Warm ballad, Choir, Speaking and preaching; non-destructive, cached, run in a worker. Takes are 24-bit
+  WAV (up to six, `P.guide.takes`, main take, per-part comping with 15 ms equal-power crossfades). Input monitoring
+  through a live chain. Level and room check (noise floor, peak, clipping, voice-to-room) with advice; it also saves
+  the noise profile. Microphone timing from 8 clicks (speakers) or claps (headphones) -> `prefs.micLatencyMs`, used
+  by the guide recorder and Sing it in.
+- Loops and beats (`app/js/looptools.js`, pure, plus `app/workers/loop-worker.js`): tempo from the file name, the
+  loop's length (whole bars) or onset autocorrelation; key and role from the name; WSOLA time-stretch (pitch kept),
+  resampling and pitch shift; MIDI file reader (format 0/1, tempo, notes, GM drums to the app's kit). `P.loops`:
+  audio loops repeat in the chosen sections and follow key changes; a beat runs under the whole song from its
+  first sound (bar-1 offset), with buttons to take its tempo and key; MIDI loops become events (and a MIDI track).
+  Audio placements play on the beat grid each pass (`script.audio`) and in the WAV render, dry. `P.mix` switches
+  the app's chords, bass, drums or melody off.
+- Finishing a song: multitrack (`P.tracks`, up to 8 beside the guide; takes stored as `<pid>:t<id>:<n>`; each with
+  takes, comping, vocal chain, gain, pan, mute, solo; recording plays the loops and every other track for overdubs).
+  Mixer (`P.mixer` for chords/bass/drums/melody/choir/loops: volume, pan, mute, solo; per-part buses in live play
+  and the render; master meter). Mastering (`app/js/mastering.js`, pure, in the worker): BS.1770 loudness with
+  gating, 4x true peak, stereo-linked glue compressor, look-ahead limiter, targets −14/−16/−10 LUFS at −1 dBTP.
+  MP3 through LAME (lamejs 1.2.1, LGPL), copied to `app/vendor` by `prepare.js` and loaded on demand, with an ID3v2
+  tag (`app/js/mp3.js`); `scripts/check-mp3.js` loads the real encoder as the app does, encodes with the app's code
+  and parses the result (ID3, Layer III frames, rate, length, bitrate), failing the GitHub build if it is broken;
+  Profile > About shows whether the MP3 maker is present; WAV files carry a RIFF INFO list. Stems: every part, loop and track as 24-bit WAV of equal length in a stored
+  ZIP with a README. Arrangement: per-part drum fills (snare and toms) with a crash into the next part, swells,
+  endings (hold, ritardando by warping the last two bars, fade); loops and beats follow the ritardando through a
+  time-varying WSOLA stretch (`LoopTools.stretchVar`) of their last two bars. Song details (`P.info`), copyright line on the
+  charts and lead sheet, and a lyrics sheet.
+- Song packages (`.gmasong`): a ZIP with manifest, the song JSON, every take of every track and every imported loop;
+  opening one sanitises the song, gives it a new id when the same song is present (take keys rewritten), and stores
+  the audio. The reader handles stored and deflated ZIPs (DecompressionStream), so re-zipped packages open too.
+- Gospel ear training and licks (`app/js/gospel.js`, pure; `app/js/views-gospel.js`): four levels of progressions
+  named with the app's Nashville numbering, cadence first, random key, level up/down from the last answers
+  (`S.gear`); 17 licks and runs relative to the key, drilled round the circle of fourths, played back on the keys
+  (note order checked by longest common subsequence) or sung (pitch tracker, octave-free), tempo rising by 4 BPM
+  per clean take; a key counts once it is clean at 80% of the goal tempo (`S.licks`).
+- Pre-release testing fixes: the offline render adds notes to the audio graph one second ahead and removes them
+  when finished (Chromium processes every connected node each quantum, so whole-song scheduling made long exports
+  quadratic: a 4-minute song went from over 10 minutes to about 30 seconds); stems and song packages are built as
+  Blob-backed ZIPs (a 4-minute song's 600 MB of stems no longer sits in memory twice); recorded tracks and loops
+  play on the computer when the song plays through the keyboard; Restore a backup on the welcome screen; the song
+  page has a heading for screen readers; the release build tries both lamejs browser builds. New test suites:
+  desktop policy walkthrough (`desktop.test.js`, the exact CSP and MIME types of main.js, every screen at two
+  widths), upgrades from 2.0/2.7 backups and a 2.9 round trip (`upgrade.test.js`), and a four-minute session with
+  three tracks, loops and choir (`stress.test.js`, with stand-in recorded piano and library sounds).
+- Memory on 4 GB laptops (measured as proportional memory of every browser process, sampled twice a second through
+  a four-minute, three-track session; `stress.test.js` now fails above 1400 MB): peak 1726 MB → about 1050 MB.
+  - In the desktop app, stems and song packages are written straight to disk piece by piece (8 MB at a time) after
+    choosing where to save (`file:save-open/-write/-close` in main.js: only .zip/.gmasong/.wav/.mp3, written to a
+    `.part` file and renamed when complete; the browser keeps the download). The ZIP is written entry by entry.
+  - Mastering measures loudness one channel at a time through one working buffer and limits in place, and the
+    worker masters its own copies in place; the export lets go of the raw render and keeps the master as plain
+    channels.
+  - The vocal and loop workers are closed three seconds after their last job, so their memory returns at once.
+  - Leaving a song frees its decoded and processed audio; unprocessed takes are dropped once processed.
+  - Memory saver (Settings > Sound: Automatic, On, Off; automatic turns on when a song's recordings and loops would
+    use more than about 15% of the computer's memory): tracks play through a live vocal chain instead of being
+    processed ahead (playback starts in about 2 s instead of about 30 s), and exports mix one track at a time.
+- Drums: 12/8 gospel ballad, Sunday slow gospel, praise break, shout, makossa feel; ghost snares, claps and crash.
+- Tests: Songcraft unit tests (spelling in every key, suggestions, voicing, singing to notes, choir, syllables) and
+  `tests/e2e/songlab.test.js` (chord editing, form, exports, choir, singing in through a fake microphone).
+
+## 2.8.0 — Studio-quality sound
+
+- Instrument library: `app/js/sf2.js` is a SoundFont 2 player (presets and instruments with global/local zones, key and
+  velocity ranges, offsets, loops incl. until-release, root key, coarse/fine/scale tuning, attenuation ×0.4, the
+  standard velocity curve, volume envelope with key scaling, low-pass filter, pan, exclusive classes).
+  `scripts/get-sounds.js` downloads GeneralUser GS on GitHub Actions (several mirrors, retries, refuses web pages and
+  truncated files) into `app/sounds` with `manifest.json`. Electric piano, guitar, strings, trumpet, choir and flute map
+  to General MIDI programs; new Church pipe organ (19), Brass section (61), Warm pad (89); the Song Lab bass part uses
+  GM 33 and its drums the standard kit. The grand piano keeps Salamander, then the library piano, then the synth.
+  Without the library every sound falls back to its synthesised version.
+- Gospel organ: nine-drawbar tonewheel model (88 8800 000), single-trigger second-harmonic percussion, key click,
+  waveshaper overdrive, Leslie with separate horn and drum rotors (Doppler delay, tremolo, stereo pan) and inertia;
+  the sustain pedal or Shift switches it fast while held; Leslie button next to the sound picker.
+- Rooms: modelled stereo impulse responses (early reflections, RT60 decay, frequency-dependent damping, width);
+  Church (default), Large hall, Studio room, Dry; `prefs.room`; also used by the offline render (WAV export).
+- Tests: SoundFont parsing (unit), the library downloader against a local server, and browser renders checking pitch,
+  zone pan and tuning, loops, velocity, drums with exclusive classes, organ tuning and Leslie speed, and room tails.
+
+## 2.7.0 — Accurate, clear and authentic
+
+- Sound: `scripts/prepare.js` downloads the Salamander Grand Piano samples on GitHub Actions (the release build runs
+  `npm run prepare-fonts`), with retries; `get-piano-samples.js` exports `download()`/`haveSamples()` (tested against a
+  local server). The synthesised piano switches to fewer partials when four or more notes sound, and long pedalled
+  passages release their oldest notes past 24, so slower computers no longer crackle.
+- Chord recognition rewritten (`E.identifyChord`): required and optional tones per chord type (35 types), root-in-bass
+  and simplicity preferences, triad inversions, sus-type bass chords named as gospel slash chords with the full name as
+  `alt`, `E.nameInterval` for two notes. Tests: 30 everyday voicings and all root-position chords in 12 keys.
+- Piano Lab: detector follows held notes (plus sustain and a 450 ms roll window), keeps the last chord on screen,
+  Hold notes mode for mouse input; 61-key keyboard (C2–C7); staff notation removed from all three tabs.
+- Vocal Studio: per-exercise directions and Start; room-noise calibration sets the voice gate; a settle phase waits
+  for the reference to fade before listening (speaker bleed could otherwise pass a note); LISTEN / WAIT / YOUR TURN
+  banner; microphone level meter; notes must be held 0.5 s; brief octave slips are ignored by the tracker.
+- `howTo()` panels (remember open/closed) on Piano Lab, Practice, Song Lab, song projects, routines, keyboard tasks,
+  Settings > MIDI keyboard and the Vocal Studio.
+
+## 2.6.2 — The piano sounds right from the first note
+
+- Fixed: the recorded piano samples were fetched and decoded only when the first note was played, so notes played
+  during loading used the synthesised stand-in piano and sounded different. The audio context and the samples now
+  load 300 ms after start-up. `Snd.info().state` reports the sample state.
+
 ## 2.6.1 — MIDI keyboards connect again
 
 - Fixed: recent Chromium requests all Web MIDI access as the `midiSysex` permission, which the permission handlers

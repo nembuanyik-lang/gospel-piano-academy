@@ -24,7 +24,7 @@ async function withMic(file, port, fn) {
 }
 const runFive = p => p.evaluate(() => new Promise(res => {
   const host = document.createElement('div'); document.body.appendChild(host);
-  const run = runVoiceEx(host, vexById('five'), { rounds: 1, onDone: sum => { res({ sum, text: host.textContent }); run.stop(); } });
+  const run = runVoiceEx(host, vexById('five'), { skipIntro: true, rounds: 1, onDone: sum => { res({ sum, text: host.textContent }); run.stop(); } });
   setTimeout(() => res({ timeout: true, text: host.textContent }), 50000);
 }));
 
@@ -82,6 +82,7 @@ test('Vocal Studio: every exercise starts, fits the singer\'s range, and finishe
       const host = document.createElement('div'); document.body.appendChild(host);
       let done = null;
       const run = runVoiceEx(host, def, { rounds: 2, count: 2, onDone: s => { done = s; } });
+      out[def.id + 'Intro'] = /How this exercise works/.test(host.textContent); host.querySelector('.vx-intro button').click();
       await wait(1200);
       const notes = [...host.querySelectorAll('.vx-t b')].map(b => b.textContent);
       for (let k = 0; k < 40 && !done; k++) { const b = host.querySelector('#vxskip'); if (b) b.click(); await wait(450); }
@@ -94,7 +95,7 @@ test('Vocal Studio: every exercise starts, fits the singer\'s range, and finishe
     out.harmonyFit = vexHarmony(4).map(h => ({ lo: Math.min(...h.harmony), hi: Math.max(...h.melody) }));
     return out;
   }));
-  VEXIDS.forEach(id => { assert.ok(r[id].done && r[id].summary, id + ' finishes with a summary: ' + JSON.stringify(r[id])); assert.ok(r[id].notes.length > 0, id + ' shows its target notes'); });
+  VEXIDS.forEach(id => { assert.equal(r[id + 'Intro'], true, id + ' shows its directions first'); assert.ok(r[id].done && r[id].summary, id + ' finishes with a summary: ' + JSON.stringify(r[id])); assert.ok(r[id].notes.length > 0, id + ' shows its target notes'); });
   assert.deepEqual(r.outside, []);
   r.harmonyFit.forEach(h => { assert.ok(h.lo >= 48 && h.hi <= 66, 'harmony fits: ' + JSON.stringify(h)); });
   assert.deepEqual(errors, []);

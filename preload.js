@@ -18,6 +18,10 @@ contextBridge.exposeInMainWorld('gpaDesktop', {
   openDataFolder: () => ipcRenderer.invoke('app:open-data-folder'),
   openExternal: (url) => ipcRenderer.invoke('app:open-external', String(url)),
   checkForUpdates: () => ipcRenderer.invoke('updates:check'),
+  // big saves (stems, song packages), written to disk piece by piece
+  saveOpen: (name) => ipcRenderer.invoke('file:save-open', String(name)),
+  saveWrite: (id, data) => ipcRenderer.invoke('file:save-write', Number(id), data instanceof Uint8Array ? data : new Uint8Array(0)),
+  saveClose: (id, keep) => ipcRenderer.invoke('file:save-close', Number(id), !!keep),
   onUpdateStatus: (fn) => { if (typeof fn === 'function') listeners.updates.add(fn); },
   onNavigate: (fn) => { if (typeof fn === 'function') listeners.nav.add(fn); },
 });

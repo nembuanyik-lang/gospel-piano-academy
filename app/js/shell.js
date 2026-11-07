@@ -162,12 +162,18 @@ async function undoImport() {
   await restoreSnapshot(snap.id);
 }
 const backupDue = () => (S.xp > 0 || Object.keys(S.lessons).length > 0) && (!S.events.lastBackup || Date.now() - S.events.lastBackup > 14 * 864e5);
+const memBudgetForText = () => { const gb = navigator.deviceMemory || 4; return Math.round(gb * 1024 * 0.15); };
 function soundCard() {
   const i = Snd.info();
-  const mode = i.loading ? 'Loading recorded piano…' : i.mode === 'recorded' ? 'Recorded grand piano' : 'Built-in piano (synthesised)';
-  return '<section class="card"><h3>Piano sound</h3><p><b>' + esc(mode) + '</b></p>' +
-    '<p class="tiny">Touch is supported: a MIDI keyboard sends its key speed, and on screen the lower part of a key plays louder. Notes ring until you release the key. Hold Shift or press the sustain pedal on a MIDI keyboard to sustain.</p>' +
-    (i.mode === 'recorded' ? (i.credit ? '<p class="tiny">' + esc(i.credit) + '</p>' : '') : '<p class="tiny">To use a recorded piano, add samples to the app (see the README).</p>') + '</section>';
+  const piano = i.loading ? 'Loading recorded piano…' : i.mode === 'recorded' ? 'Recorded grand piano (Salamander)' : i.bank === 'ready' ? 'Grand piano from the instrument library' : 'Built-in piano (synthesised)';
+  const lib = i.bank === 'loading' ? 'Loading the instrument library…' : i.bank === 'ready' ? 'Recorded instruments: electric piano, guitar, strings, trumpet, brass section, choir, flute, church organ, warm pad, bass and drums.' : 'Built-in instruments (synthesised). The installed app from GitHub includes the recorded instrument library.';
+  return '<section class="card"><h3>Instrument sound</h3><p><b>' + esc(piano) + '</b></p><p class="tiny">' + esc(lib) + '</p>' +
+    '<label class="field"><span>Room</span>' + selectHtml('roompick', Snd.rooms().map(r => [r.id, r.label]), Snd.room(), 'roompick') + '</label>' +
+    '<label class="field"><span>Memory saver</span><select data-bind="memsaver">' + [['auto', 'Automatic (recommended)'], ['on', 'Always on (lightest playback, quickest start)'], ['off', 'Off (keep every track ready)']].map(o => '<option value="' + o[0] + '"' + ((S.prefs.memSaver || 'auto') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select></label>' +
+    '<p class="tiny">This computer reports ' + ((navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'an unknown amount') + ' of memory') + '. Automatic turns the saver on for a song whose recordings and loops would need more than about ' + memBudgetForText() + ' MB: its tracks then play with a light, live version of the vocal sound, and saving processes one track at a time.</p>' +
+    '<p class="tiny">The room adds the space around the sound: Church is a large, warm reverberation like a sanctuary; Studio room is close and clear; Dry has none (best for checking timing). It is a modelled room, not a recording of a real building.</p>' +
+    '<p class="tiny">Touch is supported: a MIDI keyboard sends its key speed, and on screen the lower part of a key plays louder. Notes ring until you release the key. Hold Shift or press the sustain pedal on a MIDI keyboard to sustain. On the Gospel organ the pedal (or Shift) spins the rotating speaker fast instead, like the organ\'s half-moon switch.</p>' +
+    [i.credit, i.bankCredit].filter(Boolean).map(c => '<p class="tiny">' + esc(c) + '</p>').join('') + '</section>';
 }
 function backupCard() {
   const last = S.events.lastBackup;
@@ -196,12 +202,33 @@ const pct = (a, b) => (b ? Math.round(100 * a / b) : 0);
 const fmtDur = sec => { const m = Math.floor(sec / 60); return m >= 60 ? Math.floor(m / 60) + ' h ' + (m % 60) + ' min' : m + ' min'; };
 const bar = (p, cls) => '<div class="bar' + (cls ? ' ' + cls : '') + '" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + p + '"><i style="width:' + p + '%"></i></div>';
 const greeting = () => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'; };
+/* "How it works" panels: numbered directions for a screen or exercise. Open the first time; once closed they stay
+   closed (remembered per panel), and can be opened again at any time. */
+function howTo(id, title, steps) {
+  const closed = S.prefs.howClosed && S.prefs.howClosed[id];
+  return '<details class="howto" data-howto="' + esc(id) + '"' + (closed ? '' : ' open') + '><summary>' + icon('info') + esc(title) + '</summary><ol>' + steps.map(x => '<li>' + esc(x) + '</li>').join('') + '</ol></details>';
+}
+document.addEventListener('toggle', e => {
+  const d = e.target; if (!d || !d.matches || !d.matches('details.howto')) return;
+  S.prefs.howClosed = S.prefs.howClosed || {};
+  if (d.open) delete S.prefs.howClosed[d.dataset.howto]; else S.prefs.howClosed[d.dataset.howto] = true;
+  touch();
+}, true);
 function selectHtml(id, options, value, bind) {
   return '<select id="' + id + '" data-bind="' + bind + '">' + options.map(o => '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(value) ? ' selected' : '') + '>' + esc(o[1]) + '</option>').join('') + '</select>';
 }
 function soundPicker() {
-  return '<label class="field soundpick"><span>Sound</span>' + selectHtml('instpick', Snd.instruments().map(i => [i.id, i.label]), Snd.inst(), 'instpick') + '</label>';
+  const org = Snd.inst() === 'organ';
+  return '<label class="field soundpick"><span>Sound</span>' + selectHtml('instpick', Snd.instruments().map(i => [i.id, i.label]), Snd.inst(), 'instpick') + '</label>' +
+    (org ? '<button type="button" class="btn ghost sm leslie' + (Snd.leslieFast() ? ' on' : '') + '" data-act="leslie" aria-pressed="' + Snd.leslieFast() + '" title="Rotating speaker: slow (chorale) or fast (tremolo). The sustain pedal or Shift also switches it.">Leslie: ' + (Snd.leslieFast() ? 'fast' : 'slow') + '</button>' : '');
 }
+function refreshLeslieBtn() {   // show the Leslie switch next to each sound picker only while the organ is chosen
+  document.querySelectorAll('label.soundpick').forEach(l => {
+    const nx = l.nextElementSibling; if (nx && nx.classList.contains('leslie')) nx.remove();
+    if (Snd.inst() === 'organ') l.insertAdjacentHTML('afterend', soundPicker().replace(/^<label[\s\S]*?<\/label>/, ''));
+  });
+}
+App.onLeslie = fast => document.querySelectorAll('button.leslie').forEach(b => { b.classList.toggle('on', fast); b.setAttribute('aria-pressed', String(fast)); b.textContent = 'Leslie: ' + (fast ? 'fast' : 'slow'); });
 const keyOptions = KEY_NAMES.map(k => [k, fmt(k) + ' major']);
 
 /* ---------------------------------------------------------------- warm-up and ear suggestions */

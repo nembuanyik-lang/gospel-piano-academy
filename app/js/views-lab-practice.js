@@ -1,6 +1,6 @@
 'use strict';
 /* ---------------------------------------------------------------- PIANO LAB */
-const lab = { tab: 'play', root: 'C', quality: 'major', inv: 0, key: 'C', sroot: 'C', stype: 'major', last: null, detected: null };
+const lab = { hold: false, holdSet: null, tab: 'play', root: 'C', quality: 'major', inv: 0, key: 'C', sroot: 'C', stype: 'major', last: null, detected: null };
 const QGROUPS = [['Triads', ['major', 'minor', 'dim', 'aug', 'sus2', 'sus4']], ['Seventh chords', ['maj7', 'm7', '7', 'm7b5', 'dim7', '7sus4']], ['Colour chords', ['6', 'm6', 'add9', '9', 'maj9', 'm9', 'm11', '13']]];
 const CHROMA_ROMAN = { 1: '♭II', 3: '♭III', 6: '♭V', 8: '♭VI', 10: '♭VII' };
 function romanInKey(rootName, quality, keyName) {
@@ -11,18 +11,6 @@ function romanInKey(rootName, quality, keyName) {
   const r = lower ? base.slice(0, 1) + base.slice(1).toLowerCase() : base;
   const n = '♭' + ({ 1: 2, 3: 3, 6: 5, 8: 6, 10: 7 }[d]) + (({ minor: 'm' }[quality]) || '');
   return { roman: r, number: n, diatonic: false };
-}
-function labStaffHtml(kind) {
-  try {
-    if (kind === 'chord') {
-      const cm = labChord().midis, pcs = E.chordPcs(lab.root, lab.quality), names = E.chordNames(lab.root, lab.quality);
-      const toks = Staff.tokens(cm.map(m => names[pcs.indexOf(((m % 12) + 12) % 12)]), cm);
-      return Staff.render({ clef: 'grand', cols: [{ notes: toks, dur: 'w' }], label: 'Staff notation: ' + toks.join(', ') });
-    }
-    const mids = E.scaleMidis(lab.sroot, lab.stype, 4, true), nm = E.scaleNotes(lab.sroot, lab.stype), n = nm.length;
-    const toks = Staff.tokens(mids.map((m, i) => nm[i % n]), mids);
-    return Staff.render({ clef: 'treble', cols: toks.map(t => ({ notes: [t], dur: 'q' })), colW: 36, label: 'Staff notation: ' + toks.join(', ') });
-  } catch (e) { return ''; }
 }
 function labChord() {
   let oct = 4, m = E.chordMidi(lab.root, lab.quality, oct, lab.inv);
@@ -35,14 +23,16 @@ function viewLab() {
   const tabs = [['play', 'Free play'], ['chords', 'Chord explorer'], ['scales', 'Scale explorer']];
   let panel = '';
   if (lab.tab === 'play') {
-    panel = '<div class="card"><div class="vstaff" id="labstaff" aria-live="off"><p class="tiny vhint">Play a note and it appears on the staff here.</p></div></div><div class="card"><div class="detect" aria-live="polite"><p class="eyebrow">Chord detector</p><div class="dchord" id="dchord">Play three or more notes</div><div class="dnotes tiny" id="dnotes"></div></div><p class="muted">Press keys on the screen or use the middle row of your computer keyboard: the keys where A S D F G H J K sit on an English keyboard play C D E F G A B C, and the row above (W E T Y U) plays the black keys. Notes you play within about three seconds are read together as a chord. Hold <b>Shift</b> (or use the Sustain pedal button, or a MIDI foot pedal) to sustain notes like a piano pedal.</p><div class="row wrap"><button class="btn ghost sm" data-act="labclear">Clear</button><button class="btn ghost sm" id="sustainbtn" type="button" data-act="sustaintoggle" aria-pressed="' + Snd.pedalState() + '">Sustain pedal</button>' + (Midi.supported ? (Midi.status === 'ready' ? '<span class="tiny">MIDI: ' + esc(Midi.names.join(', ')) + '</span>' : '<button class="btn ghost sm" data-act="midiconnect">Connect MIDI keyboard</button>') : '') + '</div></div>';
+    panel = '<div class="card"><div class="detect" aria-live="polite"><p class="eyebrow">Chord detector</p><div class="dchord" id="dchord">Play a chord</div><div class="dalt tiny" id="dalt"></div><div class="dnotes" id="dnotes"></div></div>' +
+      howTo('lab-detect', 'How the chord detector works', ['Hold the notes of a chord together (on your keyboard or the keys above). The name appears at once and changes as soon as you change the chord.', 'It names the chord from the notes you are holding now, or struck together within a moment. Notes you let go of are left out, unless the sustain pedal is down.', 'The lowest note matters: C E G is C, but E G C is C/E (C with E in the bass). F A C over a G bass is shown as F/G, with its other name (G9sus4) underneath.', 'Two notes are named as an interval (for example a major 3rd).', 'Clicking with a mouse? Turn on Hold notes: each key you click stays in the chord until you click it again or press Clear.']) +
+      '<div class="row wrap"><label class="check"><input type="checkbox" id="labhold"' + (lab.hold ? ' checked' : '') + '> Hold notes (for mouse clicks)</label><button class="btn ghost sm" data-act="labclear">Clear</button><button class="btn ghost sm" id="sustainbtn" type="button" data-act="sustaintoggle" aria-pressed="' + Snd.pedalState() + '">Sustain pedal</button>' + (Midi.supported ? (Midi.status === 'ready' ? '<span class="tiny">MIDI: ' + esc(Midi.names.join(', ')) + '</span>' : '<button class="btn ghost sm" data-act="midiconnect">Connect MIDI keyboard</button>') : '') + '</div>' +
+      '<p class="tiny muted">Computer keyboard: the middle letter row plays the white keys from C (A S D F G H J K on an English keyboard), the row above plays the black keys. Hold Shift to sustain.</p></div>';
   } else if (lab.tab === 'chords') {
     const cm = labChord().midis, sym = E.chordSymbol(lab.root, lab.quality), names = E.chordNames(lab.root, lab.quality), riK = romanInKey(lab.root, lab.quality, lab.key);
     const iv = E.QUALITIES[lab.quality].iv.map(([s]) => s);
-    panel = '<div class="card"><p class="eyebrow">Root</p><div class="chips">' + KEY_NAMES.map(r => '<button type="button" class="chip' + (r === lab.root ? ' on' : '') + '" data-act="labroot" data-v="' + r + '">' + fmt(r) + '</button>').join('') + '</div>' +
+    panel = howTo('lab-chords', 'How to use the chord explorer', ['Pick a root (the note the chord is built on) and a chord type. The keys light up on the keyboard above, labelled R (root), 3, 5, 7 and 9.', 'Choose an inversion to see the same chord with a different note at the bottom.', 'Press Play chord or Arpeggio to hear it, then play it yourself on your keyboard.', 'Choose a key at the bottom to see what number this chord is in that key (for example the 4 chord).']) + '<div class="card"><p class="eyebrow">Root</p><div class="chips">' + KEY_NAMES.map(r => '<button type="button" class="chip' + (r === lab.root ? ' on' : '') + '" data-act="labroot" data-v="' + r + '">' + fmt(r) + '</button>').join('') + '</div>' +
       QGROUPS.map(g => '<p class="eyebrow">' + g[0] + '</p><div class="chips">' + g[1].map(q => '<button type="button" class="chip' + (q === lab.quality ? ' on' : '') + '" data-act="labq" data-v="' + q + '">' + esc(E.QUALITIES[q].sym || 'major') + '</button>').join('') + '</div>').join('') +
       '<p class="eyebrow">Inversion</p><div class="seg">' + Array.from({ length: Math.min(notesN, 4) }, (_, i) => '<button type="button" class="' + (i === lab.inv ? 'on' : '') + '" data-act="labinv" data-v="' + i + '">' + ['Root', '1st', '2nd', '3rd'][i] + '</button>').join('') + '</div></div>' +
-      '<div class="card"><div class="vstaff" id="labstaff">' + labStaffHtml('chord') + '</div></div>' +
       '<div class="card"><div class="chordout"><span class="csym mono">' + esc(sym) + (lab.inv ? '<small>/' + esc(fmt(names[lab.inv])) + '</small>' : '') + '</span><span class="muted">' + esc(E.QUALITIES[lab.quality].label) + '</span></div>' +
       '<p><b>Notes:</b> <span class="mono">' + names.map(fmt).join(' – ') + '</span></p><p class="tiny">Tone labels on the keys: R root, 3 third, 5 fifth, 7 seventh, 9 ninth. Distances from the root in half steps: ' + iv.join(', ') + '.</p>' +
       '<div class="row wrap"><button class="btn primary" data-act="labplay" data-mode="block">' + icon('play') + 'Play chord</button><button class="btn ghost" data-act="labplay" data-mode="arp">Arpeggio</button></div>' +
@@ -50,9 +40,8 @@ function viewLab() {
       '<p><b>' + esc(sym) + '</b> is ' + (riK.diatonic ? 'the <b class="mono">' + esc(riK.roman) + '</b> chord' : 'the <b class="mono">' + esc(riK.roman) + '</b> chord, borrowed from outside the key,') + ' in ' + esc(fmt(lab.key)) + ' major. Number system: <b class="mono">' + esc(riK.number) + '</b>.</p></div>';
   } else {
     const sc = E.SCALES[lab.stype], notes = E.scaleNotes(lab.sroot, lab.stype);
-    panel = '<div class="card"><p class="eyebrow">Key note</p><div class="chips">' + KEY_NAMES.map(r => '<button type="button" class="chip' + (r === lab.sroot ? ' on' : '') + '" data-act="sroot" data-v="' + r + '">' + fmt(r) + '</button>').join('') + '</div>' +
+    panel = howTo('lab-scales', 'How to use the scale explorer', ['Pick a key note and a scale. Its notes light up on the keyboard, numbered 1 to 8.', 'Press Play up or Up and down to hear it, then play along slowly.', 'Use it to learn the notes of the key before you play a song in that key.']) + '<div class="card"><p class="eyebrow">Key note</p><div class="chips">' + KEY_NAMES.map(r => '<button type="button" class="chip' + (r === lab.sroot ? ' on' : '') + '" data-act="sroot" data-v="' + r + '">' + fmt(r) + '</button>').join('') + '</div>' +
       '<p class="eyebrow">Scale</p><div class="chips">' + Object.keys(E.SCALES).map(k => '<button type="button" class="chip' + (k === lab.stype ? ' on' : '') + '" data-act="stype" data-v="' + k + '">' + esc(E.SCALES[k].label) + '</button>').join('') + '</div></div>' +
-      '<div class="card"><div class="vstaff" id="labstaff">' + labStaffHtml('scale') + '</div></div>' +
       '<div class="card"><h3>' + esc(fmt(lab.sroot)) + ' ' + esc(sc.label.toLowerCase()) + '</h3><div class="degs">' + notes.map((n, i) => '<span class="deg"><b class="mono">' + fmt(n) + '</b><small>' + (i + 1) + '</small></span>').join('') + '<span class="deg"><b class="mono">' + fmt(notes[0]) + '</b><small>8</small></span></div>' +
       (lab.sroot === 'C' && lab.stype === 'major' ? '<p class="tiny">Right-hand fingering: 1 2 3 1 2 3 4 5. Left hand: 5 4 3 2 1 3 2 1.</p>' : '') +
       '<div class="row wrap"><button class="btn primary" data-act="splay" data-mode="up">' + icon('play') + 'Play up</button><button class="btn ghost" data-act="splay" data-mode="updown">Up and down</button></div></div>';
@@ -66,23 +55,51 @@ function viewLab() {
         const mids = E.scaleMidis(lab.sroot, lab.stype, 4, true), lbl = {}; const n = E.SCALES[lab.stype].iv.length;
         mids.forEach((m, i) => { lbl[m] = String(i === n ? 1 : i + 1); }); hint = { midis: mids, labels: lbl }; focus = mids[0];
       }
-      const piano = Piano($('#labkb', root), { lo: 48, hi: 84, names: S.prefs.names, minKey: 38, height: 190, focus });
+      // 61 keys, C2 to C7: the same keys as a 61-key keyboard such as the Yamaha YPT-240
+      const piano = Piano($('#labkb', root), { lo: 36, hi: 96, names: S.prefs.names, minKey: 24, height: 170, focus });
       if (hint) piano.hint(hint);
       const cl = [];
       if (lab.tab === 'play') {
-        let buf = [];
-        const dEl = $('#dchord', root), nEl = $('#dnotes', root);
-        const unlisten = Input.listen(ev => {
-          const now = performance.now(); buf = buf.filter(b => now - b.t < 3000 && b.m !== ev.midi); buf.push({ m: ev.midi, t: now });
-          const midis = buf.map(b => b.m), id = E.identifyChord(midis);
-          nEl.textContent = 'Notes: ' + midis.slice().sort((a, b) => a - b).map(m => fmt(E.midiName(m))).join('  ');
-          if (id) { dEl.textContent = id.name; dEl.classList.add('hit'); }
-          else { dEl.textContent = midis.length < 3 ? 'Play three or more notes' : 'No standard chord found'; dEl.classList.remove('hit'); }
-          lab.last = buf;
-          const ls = $('#labstaff', root); if (ls) ls.innerHTML = midis.length ? Staff.render({ clef: 'grand', cols: [{ notes: midis.slice().sort((a, b) => a - b).map(m => E.midiName(m)), dur: 'w' }] }) : '';
-        });
-        lab.clear = () => { buf = []; dEl.textContent = 'Play three or more notes'; dEl.classList.remove('hit'); nEl.textContent = ''; };
-        cl.push(unlisten);
+        /* the chord is what you are holding now: keys down, plus keys released while the sustain pedal is down,
+           plus keys struck within a moment of each other (a rolled chord). With Hold notes, clicked keys stay. */
+        const dEl = $('#dchord', root), nEl = $('#dnotes', root), aEl = $('#dalt', root), holdEl = $('#labhold', root);
+        const down = new Set(), rung = new Set(), recent = [];
+        if (!lab.holdSet) lab.holdSet = new Set();
+        const current = () => {
+          if (lab.hold) return [...lab.holdSet];
+          const now = performance.now();
+          while (recent.length && now - recent[0].t > 450) recent.shift();
+          return [...new Set([...down, ...rung, ...recent.map(r => r.m)])];
+        };
+        let shown = '';
+        const show = () => {
+          const ms = current().sort((a, b) => a - b);
+          if (!ms.length) return;   // keep the last chord on screen after you let go
+          nEl.innerHTML = ms.map(m => '<span class="mono">' + esc(fmt(E.midiName(m))) + '</span>').join(' ');
+          const id = E.identifyChord(ms), iv = !id && E.nameInterval(ms);
+          const txt = id ? id.name : iv ? iv.name : ms.length === 1 ? fmt(E.midiName(ms[0]).replace(/-?\d+$/, '')) : 'Not a standard chord';
+          if (txt !== shown) { dEl.textContent = txt; shown = txt; }
+          dEl.classList.toggle('hit', !!id);
+          aEl.textContent = id && id.alt ? 'Also called ' + fmt(id.alt) : id && !id.slash && id.inversion ? 'Inversion: ' + fmt(id.bassName) + ' in the bass' : '';
+          lab.last = ms;
+        };
+        cl.push(Input.listen(ev => {
+          if (lab.hold) { if (lab.holdSet.has(ev.midi)) { lab.holdSet.delete(ev.midi); piano.mark(ev.midi, false); } else lab.holdSet.add(ev.midi); }
+          down.add(ev.midi); rung.delete(ev.midi); recent.push({ m: ev.midi, t: performance.now() });
+          // a new chord after letting go: forget what rang before
+          if (down.size === 1 && !Snd.pedalState()) rung.clear();
+          show(); if (piano.reveal) piano.reveal([ev.midi]);
+        }));
+        cl.push(Input.listenOff(ev => {
+          down.delete(ev.midi);
+          if (Snd.pedalState()) rung.add(ev.midi);
+          if (lab.hold) lab.holdSet.forEach(m => piano.mark(m, true));
+        }));
+        const pedalWatch = setInterval(() => { if (!Snd.pedalState() && rung.size) rung.clear(); }, 200);
+        cl.push(() => clearInterval(pedalWatch));
+        if (holdEl) holdEl.addEventListener('change', () => { lab.hold = holdEl.checked; lab.holdSet.clear(); piano.markAll(false); dEl.textContent = 'Play a chord'; nEl.textContent = ''; aEl.textContent = ''; shown = ''; });
+        if (lab.hold) lab.holdSet.forEach(m => piano.mark(m, true));
+        lab.clear = () => { down.clear(); rung.clear(); recent.length = 0; lab.holdSet.clear(); piano.markAll(false); dEl.textContent = 'Play a chord'; dEl.classList.remove('hit'); nEl.textContent = ''; aEl.textContent = ''; shown = ''; };
       }
       return () => { cl.forEach(f => f()); piano.destroy(); };
     }
@@ -151,6 +168,9 @@ function viewPractice() {
   }
   if (view === 'technique') return viewTechnique(back);
   if (view === 'byear') return viewByEar(back);
+  if (view === 'gear') return viewGospelEar(back);
+  if (view === 'licks') return viewLicks(back);
+  if (view === 'lick') return viewLick(back, p.id);
   if (view === 'calib') {
     return { html: '<div class="screen narrow"><div class="pagehead">' + back + '<h1>Timing calibration</h1><p class="muted">Every computer, speaker and keyboard adds a small delay. Tap along to twelve clicks and the app measures it, so play-along and tap-along scores are fair.</p></div><div class="card"><div id="cal"></div></div></div>', mount(root) { return mountCalib($('#cal', root)); } };
   }
@@ -169,9 +189,10 @@ function viewPractice() {
     '<li class="' + (t.items.warm ? 'done' : '') + '"><span class="tick">' + (t.items.warm ? icon('check') : '') + '</span><div><b>Daily exercise: ' + esc(warm.title) + '</b><span class="tiny">' + esc(warm.sub) + '</span></div><button class="btn ' + (t.items.warm ? 'ghost' : 'primary') + ' sm" type="button" data-act="pview" data-view="warm">' + (t.items.warm ? 'Again' : 'Start') + '</button></li>' +
     '<li class="' + (t.items.review ? 'done' : '') + '"><span class="tick">' + (t.items.review ? icon('check') : '') + '</span><div><b>' + (dueN ? 'Review: ' + dueN + ' skill' + (dueN === 1 ? '' : 's') + ' due' : 'Review: nothing due') + '</b><span class="tiny">' + esc(dueN ? 'A few quick questions keep earlier lessons fresh.' : nextTxt) + '</span></div>' + (dueN ? '<button class="btn primary sm" type="button" data-act="pview" data-view="review">Start</button>' : '') + '</li>' + techRow(t) + '</ul></section>';
   const tab = ui.practiceTab || 'ear';
-  const tabs = '<div class="seg ptabs" role="tablist" aria-label="Practice areas">' + [['ear', 'Ear training'], ['read', 'Reading and songs'], ['more', 'Challenges and tools']].map(x => '<button type="button" role="tab" class="' + (tab === x[0] ? 'on' : '') + '" aria-selected="' + (tab === x[0]) + '" data-act="ptab" data-t="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>';
+  const tabs = '<div class="seg ptabs" role="tablist" aria-label="Practice areas">' + [['ear', 'Ear training'], ['gospel', 'Gospel ear and licks'], ['read', 'Reading and songs'], ['more', 'Challenges and tools']].map(x => '<button type="button" role="tab" class="' + (tab === x[0] ? 'on' : '') + '" aria-selected="' + (tab === x[0]) + '" data-act="ptab" data-t="' + x[0] + '">' + x[1] + '</button>').join('') + '</div>';
   let panel;
-  if (tab === 'read') panel =
+  if (tab === 'gospel') panel = gospelPanel();
+  else if (tab === 'read') panel =
     '<section class="card"><p class="eyebrow">Songbook</p><div class="split"><div><h3>Play along</h3><p class="muted">Original pieces with a chord chart, notation and a backing track. ' + Object.keys(S.songbook || {}).length + ' of ' + SONGBOOK.length + ' tried.</p></div><button class="btn primary" data-act="pview" data-view="songbook">Open</button></div></section>' +
     '<section class="card"><p class="eyebrow">Reading music</p><div class="split"><div><h3>Sight-reading</h3><p class="muted">Short phrases on the staff that get harder as you improve.' + (S.sight.sessions ? ' Level ' + (S.sight.level || 1) + ' · ' + S.sight.sessions + ' round' + (S.sight.sessions === 1 ? '' : 's') + ' played.' : '') + '</p></div><button class="btn primary" data-act="pview" data-view="sight">Start</button></div></section>';
   else if (tab === 'more') panel =
@@ -179,7 +200,7 @@ function viewPractice() {
     '<section class="card"><p class="eyebrow">Tools</p><div class="split"><div><h3>Metronome</h3><p class="muted">Steady clicks at any tempo and time signature.</p></div><button class="btn ghost" data-act="pview" data-view="metro">Open</button></div>' +
     '<div class="split" style="margin-top:1rem"><div><h3>Timing calibration</h3><p class="muted">Makes play-along and tap-along scores fair on this computer. ' + (S.prefs.latencyMs ? 'Current setting: ' + S.prefs.latencyMs + ' ms.' : 'Not calibrated yet.') + '</p></div><button class="btn ghost" data-act="pview" data-view="calib">Calibrate</button></div></section>';
   else panel = '<section class="card"><p class="eyebrow">Play by ear</p><div class="split"><div><h3>Play it back</h3><p class="muted">Hear a chord progression, then play it back without hints. Level ' + byState().level + ' of ' + BYEAR_LEVELS.length + '.</p></div><button class="btn primary" data-act="pview" data-view="byear">Start</button></div></section><section class="card"><p class="muted">Eight questions per round. Difficulty rises when you score well and eases when you do not.</p><div class="tiles">' + earCards + '</div></section>';
-  return { html: '<div class="screen"><div class="pagehead"><h1>Practice</h1><p class="muted">Short, focused work. A few minutes a day beats one long session.</p></div>' + today + tabs + panel + '</div>' };
+  return { html: '<div class="screen"><div class="pagehead"><h1>Practice</h1><p class="muted">Short, focused work. A few minutes a day beats one long session.</p></div>' + howTo('practice', 'How to use Practice', ['Start with Today: it lists the most useful things for you right now (reviews of earlier lessons, the key of the day, a routine).', 'Ear training trains you to hear chords and intervals; Reading and songs trains reading music and playing songs; Challenges and tools has timed tests, the play-along and timing calibration.', 'Connect your keyboard first: every drill then listens to your own keys.', 'A little every day works better than a long session once a week.']) + '' + today + tabs + panel + '</div>' };
 }
 
 /* ---------------------------------------------------------------- sight-reading drill */

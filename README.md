@@ -66,6 +66,7 @@ A small log file for support is in the `logs` folder there.
 The app has a built-in synthesised piano. For a recorded grand piano:
 
     npm run get-samples      # downloads Salamander Grand Piano (CC BY 3.0) into app/samples
+    npm run get-sounds       # downloads the GeneralUser GS instrument library (about 31 MB) into app/sounds
     npm run dist:win         # rebuild so the samples are included
 
 The GitHub release build does this automatically. You can also supply your own recordings: put audio files

@@ -53,11 +53,14 @@ test('song lab: a guide track is recorded in sync with the song and mixed into t
     const peak = await p.evaluate(async () => { const P = window.__gpa.S().songs[0]; const b = await GuideStore.buffer(P); return guidePeak(b.getChannelData(0)); });
     assert.ok(peak > 0.8 && peak <= 0.95, 'the take is brought to a healthy level, got ' + peak);
     assert.ok(dur >= 7 && dur <= 10, 'about 8 seconds recorded, got ' + dur);
-    await p.waitForSelector('[data-act=pwav][data-mix=guide]');
-    const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 120000 }), p.click('[data-act=pwav][data-mix=guide]')]);
+    // the song with its recorded track, mixed and mastered (24-bit WAV with the song details)
+    await p.waitForSelector('[data-act=pexp][data-format=wav]');
+    const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 120000 }), p.click('[data-act=pexp][data-format=wav]')]);
     const buf = fs.readFileSync(await dl.path());
-    assert.equal(buf.toString('latin1', 8, 12), 'WAVE');
-    assert.match(dl.suggestedFilename(), /with-guide/);
+    assert.equal(buf.toString('latin1', 8, 12), 'WAVE'); assert.equal(buf.readUInt16LE(34), 24);
+    assert.match(dl.suggestedFilename(), /_master_/);
+    assert.ok(buf.includes(Buffer.from('INFO')) && buf.includes(Buffer.from('Gospel Music Academy')), 'song details in the file');
+    await p.waitForFunction(() => /LUFS/.test(document.querySelector('#expinfo').textContent), null, { timeout: 60000 });
     assert.deepEqual(errors, []);
   } finally { await b.close(); srv.close(); }
 });

@@ -64,6 +64,7 @@ function Piano(host, o) {
       if (h.midis && h.midis.length) requestAnimationFrame(() => reveal(h.midis));
     },
     clear() { hintState = null; paint(); },
+    reveal(ms) { reveal(ms); },
     visual(m, on) { const el = els[m]; if (el) { el.classList.toggle('on', on); if (!o.readonly) el.setAttribute('aria-pressed', String(!!on)); } },
     mark(m, on) { const el = els[m]; if (el) el.classList.toggle('on', on); },
     markAll(on) { Object.values(els).forEach(el => el.classList.toggle('on', on)); },

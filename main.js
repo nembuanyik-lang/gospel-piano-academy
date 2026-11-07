@@ -18,7 +18,7 @@ const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inl
   "media-src 'self' blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'";
 // Web pages the app may open in the user's browser. Everything else is refused.
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json',
-  '.woff2': 'font/woff2', '.png': 'image/png', '.svg': 'image/svg+xml', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav' };
+  '.woff2': 'font/woff2', '.png': 'image/png', '.svg': 'image/svg+xml', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.sf2': 'application/octet-stream' };
 const EXTERNAL_HOSTS = new Set(['github.com', 'creativecommons.org', 'tonejs.github.io']);
 
 protocol.registerSchemesAsPrivileged([
@@ -121,6 +121,42 @@ handle('app:info', () => ({
 }));
 handle('app:open-data-folder', async () => { fs.mkdirSync(dataDir(), { recursive: true }); const err = await shell.openPath(dataDir()); return { ok: !err, error: err }; });
 handle('app:open-external', (url) => { if (!openExternalSafe(url)) return { ok: false, error: 'not allowed' }; return { ok: true }; });
+/* big saves (stems, song packages): the page asks where to save, then sends the file piece by piece, so a long
+   song's files are written to disk as they are made instead of being held in memory. Only these file types, only
+   to the place the user chose, written to a .part file first and renamed when complete. */
+const SAVE_TYPES = { '.zip': 'ZIP archive', '.gmasong': 'Gospel Music Academy song package', '.wav': 'WAV audio', '.mp3': 'MP3 audio' };
+const saves = new Map(); let saveSeq = 0;
+const MAX_SAVE_PIECE = 16 * 1024 * 1024;
+handle('file:save-open', async (name) => {
+  const clean = String(name || 'export').replace(/[\\/:*?"<>|\x00-\x1f]+/g, '-').replace(/^\.+/, '').slice(0, 120) || 'export';
+  const ext = path.extname(clean).toLowerCase();
+  if (!SAVE_TYPES[ext]) return { ok: false, error: 'not allowed' };
+  const r = await dialog.showSaveDialog(win && !win.isDestroyed() ? win : undefined, {
+    defaultPath: path.join(app.getPath('downloads'), clean), filters: [{ name: SAVE_TYPES[ext], extensions: [ext.slice(1)] }],
+  });
+  if (r.canceled || !r.filePath) return { ok: true, canceled: true };
+  const file = path.extname(r.filePath).toLowerCase() === ext ? r.filePath : r.filePath + ext;
+  const fd = fs.openSync(file + '.part', 'w'), id = ++saveSeq;
+  saves.set(id, { fd, file, bytes: 0 });
+  return { ok: true, id, name: path.basename(file) };
+});
+handle('file:save-write', (id, data) => {
+  const s = saves.get(id);
+  if (!s) return { ok: false, error: 'no such save' };
+  if (!(data instanceof Uint8Array) || data.length > MAX_SAVE_PIECE) return { ok: false, error: 'invalid data' };
+  let o = 0; while (o < data.length) o += fs.writeSync(s.fd, data, o, data.length - o);
+  s.bytes += data.length;
+  return { ok: true };
+});
+handle('file:save-close', (id, keep) => {
+  const s = saves.get(id);
+  if (!s) return { ok: false, error: 'no such save' };
+  saves.delete(id);
+  fs.closeSync(s.fd);
+  if (keep) { try { fs.rmSync(s.file, { force: true }); } catch { /* not there */ } fs.renameSync(s.file + '.part', s.file); return { ok: true, name: path.basename(s.file), bytes: s.bytes }; }
+  try { fs.unlinkSync(s.file + '.part'); } catch { /* already gone */ }
+  return { ok: true, canceled: true };
+});
 handle('updates:check', () => { checkForUpdates(true); return { ok: true, update: updateState }; });
 
 function openExternalSafe(url) {

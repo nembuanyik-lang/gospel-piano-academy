@@ -154,12 +154,12 @@ const MidiOut = {
     [[1, 96], [2, 110], [3, 112], [9, 100]].forEach(([c, v]) => this.send([0xB0 | c, 7, v]));
   },
   /* the part an arranged event belongs to */
-  partOf(e) { return e.click ? 'click' : e.drum ? 'drums' : e.mel ? 'melody' : e.part === 'bass' ? 'bass' : 'chords'; },
+  partOf(e) { return e.click ? 'click' : e.drum ? 'drums' : e.mel || e.choir ? 'melody' : e.part === 'bass' ? 'bass' : 'chords'; },
   /* play a Song Lab script ({ events, bpm, total }) through the keyboard; same callbacks as Snd.play */
   play(script, o) {
     o = o || {};
     if (!this.ready()) return null;
-    const spb = 60000 / script.bpm, DR = { k: 36, s: 38, h: 42, o: 46, r: 37 };
+    const spb = 60000 / script.bpm, DR = { k: 36, s: 38, h: 42, o: 46, r: 37, cl: 39, c: 49, th: 50, tm: 47, tl: 43, sw: 52 };
     const evs = [];
     script.events.forEach(e => {
       const part = this.partOf(e), ch = this.CH[part], vel = Math.max(1, Math.min(127, Math.round((e.vel == null ? 0.7 : e.vel) * (part === 'drums' ? 110 : 120))));

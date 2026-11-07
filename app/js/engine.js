@@ -109,39 +109,79 @@ function toneLabel(pc, rootPc, quality) {
   return CHORD_TONE_LABELS[semis] || '';
 }
 
-/* ---------- chord recognition ---------- */
-const DETECT_ORDER = ['major', 'minor', 'dim', 'aug', 'sus2', 'sus4', 'maj7', 'm7', '7', 'm7b5', 'dim7', '6', 'm6', '7sus4', 'add9', '9', 'maj9', 'm9', 'm11', '13'];
-const TEMPLATE_SETS = {};
-DETECT_ORDER.forEach(q => {
-  TEMPLATE_SETS[q] = QUALITIES[q].iv.map(([s]) => s % 12).sort((a, b) => a - b).join(',');
-});
+/* ---------- chord recognition ----------
+   Names what is played the way a musician would: each chord type lists the notes it must have and the notes it
+   may leave out (the 5th is often omitted in 7th, 9th and 13th voicings; the 9th in 11ths and 13ths). Every root is
+   tried; a chord is preferred when its root is in the bass, when it leaves out little, and when it is a common
+   type. If the bass note does not belong to any chord, the notes above it are named over that bass, the way
+   gospel players write F/G or C/D. Two notes are named as an interval. */
+const CHORD_TYPES = [
+  // q (key into QUALITIES when it exists), sym, need (semitones from the root), may (optional), weight (lower = more common)
+  ['major', '', [0, 4, 7], [], 0], ['minor', 'm', [0, 3, 7], [], 0], ['dim', '°', [0, 3, 6], [], 2], ['aug', '+', [0, 4, 8], [], 2],
+  ['sus2', 'sus2', [0, 2, 7], [], 2], ['sus4', 'sus4', [0, 5, 7], [], 1.5],
+  ['maj7', 'maj7', [0, 4, 11], [7], 0.5], ['7', '7', [0, 4, 10], [7], 0.4], ['m7', 'm7', [0, 3, 10], [7], 0.4], ['m7b5', 'm7♭5', [0, 3, 6, 10], [], 1],
+  ['dim7', '°7', [0, 3, 6, 9], [], 1.2], ['mmaj7', 'm(maj7)', [0, 3, 11], [7], 2.5], ['7sus4', '7sus4', [0, 5, 10], [7], 1.2],
+  ['6', '6', [0, 4, 9], [7], 1], ['m6', 'm6', [0, 3, 9], [7], 1.2], ['69', '6/9', [0, 4, 9, 2], [7], 1.5],
+  ['add9', 'add9', [0, 4, 2], [7], 0.9], ['madd9', 'm(add9)', [0, 3, 2], [7], 1.3],
+  ['maj9', 'maj9', [0, 4, 11, 2], [7], 1], ['9', '9', [0, 4, 10, 2], [7], 0.9], ['m9', 'm9', [0, 3, 10, 2], [7], 1], ['9sus4', '9sus4', [0, 5, 10, 2], [7], 1.4],
+  ['7b9', '7♭9', [0, 4, 10, 1], [7], 1.6], ['7#9', '7♯9', [0, 4, 10, 3], [7], 1.6], ['7#5', '7♯5', [0, 4, 8, 10], [], 1.8], ['7b5', '7♭5', [0, 4, 6, 10], [], 2.2],
+  ['m11', 'm11', [0, 3, 10, 5], [7, 2], 1.4], ['maj7#11', 'maj7♯11', [0, 4, 11, 6], [7, 2], 2],
+  ['13', '13', [0, 4, 10, 9], [7, 2], 1.3], ['maj13', 'maj13', [0, 4, 11, 9], [7, 2], 2], ['m13', 'm13', [0, 3, 10, 9], [7, 2, 5], 2], ['13sus4', '13sus4', [0, 5, 10, 9], [7, 2], 2.2],
+  ['7#9b13', '7♯5♯9', [0, 4, 10, 3, 8], [], 2.4], ['7b9b13', '7♭9♭13', [0, 4, 10, 1, 8], [7], 2.6]
+];
+const INTERVAL_NAMES = ['unison', 'minor 2nd', 'major 2nd', 'minor 3rd', 'major 3rd', 'perfect 4th', 'tritone', 'perfect 5th', 'minor 6th', 'major 6th', 'minor 7th', 'major 7th'];
+function matchChord(pcs, bassPc) {
+  let best = null;
+  for (const r of pcs) {
+    const rel = new Set(pcs.map(p => (p - r + 12) % 12));
+    for (const [q, sym, need, may, w] of CHORD_TYPES) {
+      if (!need.every(i => rel.has(i))) continue;
+      const allowed = new Set(need.concat(may));
+      if (![...rel].every(i => allowed.has(i))) continue;
+      const omitted = may.filter(i => !rel.has(i)).length;
+      // triads are often inverted (C/E, Am/C); a 7th or larger chord with another note in the bass is rarer
+      const basic = need.length === 3 && !may.length;
+      // three notes are more likely an inverted triad than a bigger chord with a note left out
+      const score = (r === bassPc || bassPc === null ? 0 : basic ? 1 : 6) + omitted * (pcs.length === 3 ? 2 : 0.6) + w;
+      if (!best || score < best.score) best = { r, q, sym, score, need, may };
+    }
+  }
+  return best;
+}
+const symOf = (rootName, q, sym) => (QUALITIES[q] ? chordSymbol(rootName, q) : fmt(rootName) + sym);
 function identifyChord(midis) {
   if (!midis || !midis.length) return null;
-  const sorted = [...midis].sort((a, b) => a - b);
+  const sorted = [...new Set(midis)].sort((a, b) => a - b);
   const bassPc = ((sorted[0] % 12) + 12) % 12;
   const pcs = [...new Set(sorted.map(m => ((m % 12) + 12) % 12))];
   if (pcs.length < 3) return null;
-  const cands = [];
-  for (const r of pcs) {
-    const key = pcs.map(p => (p - r + 12) % 12).sort((a, b) => a - b).join(',');
-    for (let qi = 0; qi < DETECT_ORDER.length; qi++) {
-      if (TEMPLATE_SETS[DETECT_ORDER[qi]] === key) cands.push({ r, q: DETECT_ORDER[qi], rank: (r === bassPc ? 0 : 100) + qi });
+  let m = matchChord(pcs, bassPc), slash = false, alt = null;
+  // a plain triad over a bass note that is not part of it: gospel players name it as a slash chord (F/G, C/D, A♭/B♭),
+  // and the full name (G9sus4, D9sus4) is given as the alternative
+  const upper = pcs.filter(p => p !== bassPc);
+  if (upper.length >= 3) {
+    const u = matchChord(upper, null);
+    const triad = u && ['major', 'minor'].includes(u.q) && u.need.length === 3 && upper.length === 3;
+    const susBass = m && m.r === bassPc && /sus/.test(m.q);
+    if (u && (!m || (triad && susBass))) {
+      if (m && m.r === bassPc) alt = symOf(ROOT_NAMES[m.r], m.q, m.sym);
+      m = u; slash = true;
     }
   }
-  if (!cands.length) return null;
-  cands.sort((a, b) => a.rank - b.rank);
-  const c = cands[0];
-  const rootName = ROOT_NAMES[c.r];
-  const names = chordNames(rootName, c.q);
-  const ivs = QUALITIES[c.q].iv.map(([s]) => s % 12);
-  const bassIdx = ivs.indexOf((bassPc - c.r + 12) % 12);
-  const inversion = bassIdx < 0 ? 0 : bassIdx;
-  const sym = chordSymbol(rootName, c.q);
-  return {
-    rootPc: c.r, rootName, quality: c.q, inversion,
-    name: inversion > 0 ? sym + '/' + fmt(names[bassIdx]) : sym,
-    symbol: sym, bassName: names[bassIdx]
-  };
+  if (!m) return null;
+  const rootName = ROOT_NAMES[m.r], sym = symOf(rootName, m.q, m.sym);
+  const bassName = ROOT_NAMES[bassPc];
+  const ivs = m.need.concat(m.may), bassIv = (bassPc - m.r + 12) % 12;
+  let inversion = 0;
+  if (!slash && bassPc !== m.r) { const order = [0, 3, 4, 7, 6, 8, 10, 11, 9, 2, 1, 5]; inversion = Math.max(1, [0, 4, 7, 10].indexOf(bassIv) > 0 ? [0, 4, 7, 10].indexOf(bassIv) : [0, 3, 7, 11].indexOf(bassIv) > 0 ? [0, 3, 7, 11].indexOf(bassIv) : 1); }
+  const name = (slash || bassPc !== m.r) ? sym + '/' + fmt(bassName) : sym;
+  return { rootPc: m.r, rootName, quality: m.q, inversion: slash ? 0 : inversion, name, symbol: sym, bassName, slash, alt, known: !!QUALITIES[m.q], ivs };
+}
+/* two notes: name the interval */
+function nameInterval(midis) {
+  const s = [...new Set(midis)].sort((a, b) => a - b); if (s.length !== 2) return null;
+  const d = s[1] - s[0], name = d === 12 ? 'octave' : d > 12 ? INTERVAL_NAMES[d % 12] + ' (plus an octave)' : INTERVAL_NAMES[d];
+  return { name, semis: d, low: s[0], high: s[1] };
 }
 /* feedback for "expected X, played Y" */
 function compareToChord(playedMidis, rootName, quality, opts) {
@@ -306,7 +346,10 @@ const STYLES = {
   whole:  { label: 'Whole notes' },
   pulse:  { label: 'Quarter pulse' },
   arp:    { label: 'Arpeggio' },
-  groove: { label: 'Gospel groove' }
+  groove: { label: 'Gospel groove' },
+  triplets: { label: '12/8 triplet chords' },
+  sunday: { label: 'Gospel ballad comping' },
+  stabs: { label: 'Shout stabs (off-beats)' }
 };
 function progEvents(voiced, style, beatsPerChord) {
   const bpc = beatsPerChord || 4;
@@ -325,6 +368,15 @@ function progEvents(voiced, style, beatsPerChord) {
       ev.push({ t: t0, d: 1.9, notes: [v.bass] });
       if (bpc >= 3) ev.push({ t: t0 + 2, d: 1.9, notes: [v.bass + (v.bass < 48 ? 7 : 0)] });
       for (let k = 0; k < bpc; k++) ev.push({ t: t0 + k + 0.5, d: 0.4, notes: v.rh });
+    } else if (style === 'triplets') {
+      ev.push({ t: t0, d: bpc * 0.97, notes: [v.bass] });
+      for (let k = 0; k < bpc * 3; k++) ev.push({ t: t0 + k / 3, d: 0.3, notes: v.rh, vel: k % 3 === 0 ? 0.62 : 0.42 });
+    } else if (style === 'sunday') {
+      ev.push({ t: t0, d: bpc * 0.97, notes: [v.bass] });
+      [[0, 1.4], [1.5, 0.4], [2, 1.4], [3.5, 0.4]].forEach(([o, d]) => { if (o < bpc) ev.push({ t: t0 + o, d, notes: v.rh }); });
+    } else if (style === 'stabs') {
+      ev.push({ t: t0, d: 0.4, notes: v.rh.concat([v.bass]) });
+      for (let k = 0; k < bpc; k++) ev.push({ t: t0 + k + 0.5, d: 0.22, notes: v.rh });
     } else {
       ev.push({ t: t0, d: bpc * 0.97, notes: v.rh.concat([v.bass]) });
     }
@@ -551,6 +603,11 @@ const BEATS = {
   highlife: { label: 'Highlife', n: 16, k: [0, 8, 10], s: [4, 12], h: [0, 2, 4, 6, 8, 10, 12, 14], r: [2, 6, 11, 14] },
   reggae:   { label: 'Reggae one-drop', n: 16, k: [8], r: [8], h: [0, 2, 4, 6, 8, 10, 12, 14] },
   praise:   { label: 'Fast praise', n: 16, k: [0, 4, 8, 12], s: [4, 12], o: [2, 6, 10, 14] },
+  gospel128:{ label: '12/8 gospel ballad', n: 12, k: [0, 7], s: [3, 9], g: [5, 11], h: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] },
+  sunday:   { label: 'Sunday slow gospel (half-time)', n: 16, k: [0, 7, 10], s: [8], g: [3, 13, 15], h: [0, 2, 4, 6, 8, 10, 12, 14] },
+  praisebreak: { label: 'Praise break', n: 16, k: [0, 4, 8, 12], s: [4, 12], g: [1, 7, 9, 14, 15], o: [2, 6, 10, 14], cl: [4, 12] },
+  shout:    { label: 'Shout (holy dance)', n: 16, k: [0, 4, 8, 12], s: [2, 6, 10, 14], h: [0, 4, 8, 12], cl: [2, 6, 10, 14] },
+  makossa:  { label: 'Makossa feel (Cameroon)', n: 16, k: [0, 8, 11], s: [4, 12], r: [3, 7, 14], h: [0, 4, 8, 12], o: [2, 6, 10, 14] },
   custom:   { label: 'My own beat (grid)' }
 };
 /* drum events for `bars` bars of 4 beats. o = { beat, swing (0-60), grid } */
@@ -563,13 +620,15 @@ function beatEvents(o, bars) {
     b = { n: 16 };
     ['k', 's', 'h', 'o'].forEach(r => { b[r] = (g[r] || []).map((x, i) => (x ? i : -1)).filter(i => i >= 0); });
   }
-  const len = 4 / b.n, sw = Math.min(60, Math.max(0, +(o && o.swing) || 0)) / 100, VEL = { k: 0.9, s: 0.8, h: 0.4, o: 0.45, r: 0.55 };
+  const len = 4 / b.n, sw = Math.min(60, Math.max(0, +(o && o.swing) || 0)) / 100, VEL = { k: 0.9, s: 0.8, h: 0.4, o: 0.45, r: 0.55, g: 0.22, cl: 0.6 };
+  const per = b.n / 4;                       // steps in one beat (4 for sixteenths, 3 for triplets)
   const ev = [];
   for (let bar = 0; bar < bars; bar++) {
-    ['k', 's', 'h', 'o', 'r'].forEach(r => (b[r] || []).forEach(i => {
+    ['k', 's', 'h', 'o', 'r', 'g', 'cl'].forEach(r => (b[r] || []).forEach(i => {
       let t = bar * 4 + i * len;
       if (b.n === 16 && i % 2 === 1) t += len * sw;
-      ev.push({ t, d: 0.1, drum: r, vel: r === 'h' && i % 4 === 0 ? 0.55 : VEL[r] });
+      // g = a ghost note on the snare (very soft); hi-hats lean on the beat
+      ev.push({ t, d: 0.1, drum: r === 'g' ? 's' : r, vel: r === 'h' && i % per === 0 ? 0.55 : VEL[r] });
     }));
   }
   return ev;
@@ -579,7 +638,7 @@ const Engine = {
   LETTERS, NAT, ROOT_NAMES, SHARP_NAMES, QUALITIES, SCALES, PROGRESSIONS, STYLES, EAR_TYPES, MELODIES, INTERVALS, RANKS,
   DIA_TRIAD, DIA_SEVENTH,
   parseName, parseToken, pcOfName, midiOf, fmt, midiName, pcName, isBlack, spell,
-  chordNames, chordPcs, chordSymbol, chordMidi, toneLabel, identifyChord, compareToChord, compareToVoicing,
+  chordNames, chordPcs, chordSymbol, chordMidi, toneLabel, identifyChord, nameInterval, CHORD_TYPES, compareToChord, compareToVoicing,
   scaleNotes, scaleMidis, scaleTokens, diatonic, progressionChords, voiceProgression, romanFor, numberFor,
   seqEvents, arpEvents, blockEvent, progEvents, toEvents, BEATS, beatEvents,
   scoreTaps, steadiness, dateStr, addDays, streak, rankFor,
