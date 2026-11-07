@@ -142,3 +142,18 @@ test('curriculum: Level 4 and Level 5 exist, in order, and every challenge there
   assert.ok(adv.length >= 25);
   adv.forEach(l => assert.equal(l.challenge.type, 'perf', l.id + ' challenge should be a performance test'));
 });
+
+test('voice pitch tracking (YIN) is within 10 cents from C2 to C6, including a weak fundamental, and ignores noise', () => {
+  const P = require('../app/js/pitch.js');
+  const sr = 48000, N = 2048;
+  const voice = (hz, weak) => { const b = new Float32Array(N); for (let i = 0; i < N; i++) { const t = i / sr, f = hz * (1 + 0.003 * Math.sin(2 * Math.PI * 5.5 * t)); let v = 0; for (let h = 1; h <= 8; h++) v += (weak && h === 1 ? 0.15 : 1) / h * Math.sin(2 * Math.PI * f * h * t + h); b[i] = 0.25 * v; } return b; };
+  for (let m = 36; m <= 84; m++) for (const weak of [false, true]) {
+    const r = P.yin(voice(P.midiToHz(m), weak), sr);
+    assert.ok(r, 'a pitch for ' + m);
+    assert.ok(Math.abs(P.hzToMidi(r.hz) - m) * 100 < 10, 'within 10 cents at ' + m + (weak ? ' (weak fundamental)' : ''));
+  }
+  let seed = 1; const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647 - 0.5;
+  assert.equal(P.yin(Float32Array.from({ length: N }, rand), sr), null);
+  assert.equal(Math.round(P.centsToTarget(57 - 12, 57, true)), 0, 'an octave below scores as the same note');
+  assert.equal(Math.round(P.centsToTarget(57.3, 57, true)), 30);
+});

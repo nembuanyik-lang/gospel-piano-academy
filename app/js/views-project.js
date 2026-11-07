@@ -27,6 +27,25 @@ function arrangeCard(P) {
     '<label class="switch"><input type="checkbox" data-bind="psev"' + (P.sev ? ' checked' : '') + '><span>Use 7th chords</span></label>' + soundPicker() +
     '<p class="tiny">Sections play with their own energy: the intro and outro are gentle, the chorus is fullest.</p></section>';
 }
+/* where the Song Lab plays: the computer, or the keyboard's own speakers and sounds (MIDI out) */
+const kbdOutOn = () => !!(S.prefs.kbdOut && S.prefs.kbdOut.on) && MidiOut.ready();
+function kbdOutRow() {
+  const k = S.prefs.kbdOut || {}, conn = typeof Midi !== 'undefined' && Midi.status === 'ready';
+  return '<div class="row wrap kbdout"><label class="field"><span>Play through</span><select data-bind="pkbdout"><option value="">Computer speakers</option><option value="1"' + (k.on ? ' selected' : '') + '>My keyboard (its own sounds)</option></select></label>' +
+    (k.on ? '<label class="field"><span>Chord sound on the keyboard</span><select data-bind="pkbdprog">' + KBD_SOUNDS.map(x => '<option value="' + x[0] + '"' + ((k.prog || 0) === x[0] ? ' selected' : '') + '>' + esc(x[1]) + '</option>').join('') + '</select></label>' +
+      (conn ? '<button class="btn ghost sm" type="button" data-act="pkbdtest">' + icon('play') + 'Test the keyboard sound</button>' : '<button class="btn primary sm" type="button" data-act="midiconnect">Connect your keyboard</button>') : '') +
+    (k.on ? '<p class="tiny">' + (conn && MidiOut.ready() ? 'The song plays from ' + esc(MidiOut.name()) + ': chords, bass, melody and drums on their own channels, so your own playing on the keyboard is not changed.' : 'Connect the keyboard by USB, then press Connect. Until then the song plays on the computer.') + '</p>' : '') + '</div>';
+}
+/* turn a chord played on the keyboard into a chord number in the song's key */
+function chordToDegree(P, hit) {
+  const d = E.diatonic(P.key, P.sev), pc = E.pcOfName(hit.root);
+  const same = d.find(c => E.pcOfName(c.root) === pc);
+  if (!same) return { ok: false, msg: fmt(hit.symbol) + ' is not one of the seven chords of ' + fmt(P.key) + ' major. Play a chord from the key, shown on the chips below.' };
+  const minorish = q => /^(minor|m7|m6|m9|m11)$/.test(q), dimish = q => /^(dim|dim7|m7b5)$/.test(q);
+  const fam = q => dimish(q) ? 'dim' : minorish(q) ? 'min' : 'maj';
+  const note = fam(hit.quality) === fam(same.quality) ? '' : ' (you played ' + fmt(hit.symbol) + '; in ' + fmt(P.key) + ' the ' + same.roman + ' chord is ' + fmt(same.name) + ')';
+  return { ok: true, deg: same.deg, name: same.name, note };
+}
 function chordsCard(P) {
   const st = P.steps, sec = pst().sec, s = P.sections[sec], sc = sectionChords(P, sec);
   const others = SECTION_TYPES.filter(t => t !== sec);
@@ -35,6 +54,7 @@ function chordsCard(P) {
     '<div class="chips">' + E.diatonic(P.key, P.sev).map(c => '<button type="button" class="chip-btn" data-act="padd" data-d="' + c.deg + '"><b class="mono">' + esc(c.name) + '</b><span>' + esc(c.roman) + '</span></button>').join('') + '</div>' +
     '<div class="grid2"><label class="field"><span>Chord length</span>' + selectHtml('plen', CHORD_LENS.map(x => [x[0], x[1]]), s.len, 'plen') + '</label>' +
     '<label class="field"><span>Copy chords from</span><select data-bind="pcopy"><option value="">Choose a section…</option>' + others.map(t => '<option value="' + esc(t) + '">' + esc(t) + ' (' + P.sections[t].degs.length + ' chords)</option>').join('') + '</select></label></div>' +
+    '<div class="row wrap kbdin"><button class="btn ' + (pst().kbin ? 'primary' : 'soft') + ' sm" type="button" id="pkbin">' + icon('piano') + (pst().kbin ? 'Stop playing chords in' : 'Play chords in from your keyboard') + '</button><span class="tiny" id="pkbinfo" aria-live="polite">' + (pst().kbin ? 'Play each chord of the ' + esc(sec) + ' on your keyboard (three notes or more), one after the other. Each one is added when you let go.' : 'Or tap the chords above.') + '</span></div>' +
     '<div class="row wrap"><button class="btn ghost sm" type="button" data-act="pundo">Remove last</button><button class="btn ghost sm" type="button" data-act="psecplay">' + icon('play') + 'Loop ' + esc(sec) + '</button>' +
     '<button class="btn ' + (st.prog ? 'ghost' : 'primary') + ' sm" type="button" data-act="pstep" data-k="prog"' + (P.sections.Chorus.degs.length >= 2 ? '' : ' disabled') + '>' + (st.prog ? 'Marked done' : 'Mark step done') + '</button></div>' +
     '<p class="tiny">' + esc(sec) + ': ' + sc.chs.length + ' chords, ' + sc.beats / meterOf(P).bar + ' bars.</p></section>';
@@ -85,6 +105,7 @@ function viewProject(pid) {
     '<p class="muted">' + nDone + ' of 4 steps done' + (P.done ? ' · finished' : '') + ' · ' + esc(fmt(P.key)) + ' · ' + METERS[P.ts].label + ' · ' + P.bpm + ' BPM · ' + fmtTime(secs) + ' long</p>' + bar(nDone * 25) + '</div>' +
     '<section class="card player"><div class="split"><div><p class="eyebrow">The whole song</p><h3 id="songpos">' + esc(songStructure(P).join(' · ')) + '</h3></div>' +
     '<div class="row wrap"><button class="btn primary" type="button" id="songplay">' + icon('play') + 'Play the song</button>' + (P.guide ? '<label class="switch"><input type="checkbox" data-bind="pwithguide"' + (pst().withGuide ? ' checked' : '') + '><span>With guide track</span></label>' : '') + '</div></div>' +
+    kbdOutRow() +
     '<div class="songbar" id="songbar">' + (() => { const A = arrangeSong(P); return A.timeline.map(t => '<span style="flex:' + t.beats + '" title="' + esc(t.type) + '">' + esc(t.type) + '</span>').join(''); })() + '<i id="songcur"></i></div></section>' +
     arrangeCard(P) + chordsCard(P) + melodyCard(P) +
     '<section class="card"><p class="eyebrow">Step 3 ' + (st.chorus ? '<span class="tag ok">Done</span>' : '') + '</p><h3>Make it a chorus</h3><p class="muted">A chorus carries the main message and repeats. Write 2 to 4 short lines that someone could sing back after hearing them once.</p><label class="field"><span>Chorus lyrics</span><textarea id="lchorus" rows="4" data-bind="lchorus">' + esc(P.lyrics.chorus) + '</textarea></label>' +
@@ -103,6 +124,11 @@ let projPlay = null;
 function stopProjPlay() { if (projPlay) { const h = projPlay; projPlay = null; h.stop(); } }
 function playScript(script, o) {
   stopProjPlay();
+  if (kbdOutOn() && !(o && o.computer)) {
+    const k = S.prefs.kbdOut || {};
+    projPlay = MidiOut.play(script, Object.assign({ chordProg: k.prog || 0, melProg: 0 }, o || {}));
+    if (projPlay) return projPlay;
+  }
   projPlay = Snd.play(script, Object.assign({ force: true, inst: () => Snd.backingInst() }, o || {}));
   return projPlay;
 }
@@ -130,6 +156,28 @@ function mountProject(root, P) {
   });
   cl.push(() => { stopProjPlay(); clearInterval(tick); });
 
+  /* chords played in from the keyboard: each chord (3+ notes) is added to the section when it is released */
+  const kbBtn = $('#pkbin', root), kbInfo = $('#pkbinfo', root);
+  if (kbBtn) kbBtn.addEventListener('click', () => { pst().kbin = !pst().kbin; render(); });
+  if (pst().kbin) {
+    const held = new Set(); let peak = [];
+    cl.push(Input.listen(ev => { held.add(ev.midi); if (held.size >= peak.length) peak = [...held]; }));
+    cl.push(Input.listenOff(ev => {
+      held.delete(ev.midi);
+      if (held.size || peak.length < 3) { if (!held.size) peak = []; return; }
+      const notes = peak; peak = [];
+      const hit = E.identifyChord(notes);
+      if (!hit) { if (kbInfo) kbInfo.textContent = 'That was not a chord the app knows. Try again.'; return; }
+      const s = P.sections[pst().sec];
+      if (s.degs.length >= MAX_SECTION_CHORDS) { if (kbInfo) kbInfo.textContent = 'Eight chords is the most a section can hold.'; return; }
+      const r = chordToDegree(P, { root: hit.rootName, quality: hit.quality, symbol: hit.symbol });
+      if (!r.ok) { if (kbInfo) kbInfo.textContent = r.msg; return; }
+      s.degs.push(r.deg); if (pst().sec === 'Chorus') P.steps.prog = false; syncLegacy(P); touch();
+      toast('Added ' + fmt(r.name) + r.note + '.');
+      render();
+    }));
+  }
+
   /* melody recorder for the chosen section */
   const piano = Piano($('#melpiano', root), { lo: 55, hi: 84, names: S.prefs.names, minKey: 34, height: 120 });
   cl.push(() => piano.destroy());
@@ -144,6 +192,7 @@ function mountProject(root, P) {
     recBtn.innerHTML = icon('stop') + 'Stop'; info.textContent = 'Count-in… then play.';
     const q = b => Math.round(b * 2) / 2;
     playScript({ events, bpm: P.bpm, total: bar + A.beats }, {
+      computer: true,
       onStart: t => { rec.start = t + bar * spb; },
       onEnd: () => {
         const r = rec; rec = null; recBtn.innerHTML = icon('mic') + 'Record ' + esc(sec);
@@ -327,6 +376,10 @@ const PROJECT_BINDS = {
   plen: el => { const P = curProj(); P.sections[pst().sec].len = +el.value; touch(); render(); },
   pcopy: el => { const P = curProj(), from = el.value; if (!from || !P.sections[from]) return; P.sections[pst().sec] = { degs: P.sections[from].degs.slice(), len: P.sections[from].len }; syncLegacy(P); touch(); toast('Copied the chords from the ' + from + '.'); render(); },
   pwithguide: el => { pst().withGuide = el.checked; },
+  pkbdout: el => { S.prefs.kbdOut = Object.assign({}, S.prefs.kbdOut || {}, { on: el.value === '1' }); stopProjPlay(); touch(); render(); },
+  kbdmodel: el => { S.prefs.keyboard = el.value || undefined; if (!el.value) delete S.prefs.keyboard; touch(); render(); },
+  midisound: el => { S.prefs.midiSound = el.value === 'keyboard' ? 'keyboard' : 'both'; touch(); },
+  pkbdprog: el => { S.prefs.kbdOut = Object.assign({}, S.prefs.kbdOut || {}, { prog: +el.value || 0 }); touch(); },
   pmic: el => { S.prefs.micId = el.value || undefined; if (!el.value) delete S.prefs.micId; touch(); },
   pguidegain: el => { const P = curProj(); if (P.guide) { P.guide.gain = +el.value / 100; touch(); } },
   pguidenudge: el => { const P = curProj(); if (P.guide) { P.guide.nudgeMs = +el.value; const v = $('#nudgev'); if (v) v.textContent = el.value; touch(); } }

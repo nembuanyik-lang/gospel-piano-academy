@@ -1,6 +1,7 @@
 # Gospel Music Academy – Desktop Edition
 
-Learn gospel piano and guitar, offline, from the first note to mastery: 151 piano lessons in ten levels
+Learn gospel piano and guitar, offline, from the first note to mastery: 168 piano lessons in eleven levels
+(starting with Level 0, which teaches the Yamaha YPT-240 keyboard itself, checked over USB MIDI),
 (ending with Level 4 Advanced and Level 5 Mastery), a 57-lesson guitar course, timed performance tests, daily technique,
 play-by-ear drills, song writing and production. The app (`app/`) runs inside Electron on Windows, macOS and Linux,
 keeps progress on the computer with automatic daily snapshots, supports MIDI keyboards, and updates itself
@@ -85,6 +86,12 @@ Each piano lesson has an "At your piano" step: a 20-minute routine for your own 
 block timer, chimes, a metronome and a session log. Routines live in `app/js/routines-1.js` to `routines-4.js`
 (one entry per lesson id: focus, four blocks totalling 15 minutes, and a ready check); the app adds the warm-up
 and close. A browser test checks that every lesson has one and that each totals 20 minutes.
+
+## The Vocal Studio (Voice)
+
+Singing practice with the microphone: range finder, live pitch line, ten graded exercises pitched to your range,
+a daily warm-up, short lessons, progress, and the best key for each Song Lab song. Pitch tracking is YIN
+(`app/js/pitch.js`); exercises and screens are in `app/js/voice.js`. Headphones help: the app plays first, then listens.
 
 ## The Song Lab studio (Song Lab > a song project)
 

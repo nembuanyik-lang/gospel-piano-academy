@@ -164,7 +164,7 @@ const BINDS = {
 };
 const LIVE = new Set(['pbpm', 'pswing', 'pguidegain', 'pguidenudge', 'resettext', 'csearch', 'slbpm', 'ptitle', 'lchorus', 'lverse', 'lbridge', 'obname', 'pname']);
 /* the song project studio brings its own actions and bindings (views-project.js) */
-Object.assign(ACTIONS, PROJECT_ACTIONS);
+Object.assign(ACTIONS, PROJECT_ACTIONS, VOICE_ACTIONS);
 Object.assign(BINDS, PROJECT_BINDS);
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]'); if (!el || el.disabled) return;

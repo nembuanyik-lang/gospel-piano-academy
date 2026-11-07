@@ -17,7 +17,7 @@ const MAX_DEPTH = 8, MAX_ARRAY = 5000, DEFAULT_TEXT = 1000;
 const SECTIONS = ['Intro', 'Verse', 'Pre-chorus', 'Chorus', 'Bridge', 'Outro'];
 const DAILY = [5, 10, 15, 20, 30];
 const TOP_KEYS = ['v', 'updated', 'profile', 'lessons', 'cats', 'xp', 'practice', 'ear', 'ach', 'songs', 'prefs', 'testouts',
-  'scores', 'today', 'sprint', 'recommend', 'events', 'review', 'songbook', 'sight', 'guitar', 'perf', 'signoffs', 'byear', 'routines'];
+  'scores', 'today', 'sprint', 'recommend', 'events', 'review', 'songbook', 'sight', 'guitar', 'perf', 'signoffs', 'byear', 'routines', 'voice'];
 
 const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
 const num = (v, d, lo, hi) => { const n = typeof v === 'number' ? v : NaN; if (!Number.isFinite(n)) return d; return Math.min(hi === undefined ? n : hi, Math.max(lo === undefined ? n : lo, n)); };
@@ -115,7 +115,7 @@ function cleanState(raw, ctx) {
   const out = {};
   TOP_KEYS.forEach(k => { if (src[k] !== undefined && !DANGEROUS.has(k)) { const c = clean(src[k], 1, k); if (c !== undefined) out[k] = c; } });
 
-  const objKeys = ['profile', 'lessons', 'cats', 'practice', 'ear', 'ach', 'prefs', 'testouts', 'today', 'sprint', 'recommend', 'events', 'review', 'songbook', 'sight', 'guitar', 'perf', 'signoffs', 'byear', 'routines'];
+  const objKeys = ['profile', 'lessons', 'cats', 'practice', 'ear', 'ach', 'prefs', 'testouts', 'today', 'sprint', 'recommend', 'events', 'review', 'songbook', 'sight', 'guitar', 'perf', 'signoffs', 'byear', 'routines', 'voice'];
   objKeys.forEach(k => { if (out[k] !== undefined && !isObj(out[k])) delete out[k]; });
   ['songs', 'scores'].forEach(k => { if (out[k] !== undefined && !Array.isArray(out[k])) delete out[k]; });
 
@@ -141,12 +141,33 @@ function cleanState(raw, ctx) {
     if (p.textSize !== undefined) p.textSize = num(p.textSize, 100, 90, 150);
     if (p.latencyMs !== undefined) p.latencyMs = num(p.latencyMs, 0, -300, 300);
     if (p.micId !== undefined && (typeof p.micId !== 'string' || p.micId.length > 200)) delete p.micId;
+    if (p.keyboard !== undefined && !['ypt240', 'touch'].includes(p.keyboard)) delete p.keyboard;
+    if (p.midiSound !== undefined && !['both', 'keyboard'].includes(p.midiSound)) delete p.midiSound;
+    if (p.kbdOut !== undefined) { if (!isObj(p.kbdOut)) delete p.kbdOut; else p.kbdOut = { on: p.kbdOut.on === true, prog: [0, 4, 19, 48, 52, 88].includes(p.kbdOut.prog) ? p.kbdOut.prog : 0 }; }
+  }
+  if (out.voice) {
+    const v = out.voice, c = {};
+    const midi = x => Math.round(num(x, 60, 24, 100));
+    if (isObj(v.range)) c.range = { lo: midi(v.range.lo), hi: midi(v.range.hi), at: typeof v.range.at === 'string' ? v.range.at.slice(0, 10) : '' };
+    if (c.range && c.range.hi <= c.range.lo) delete c.range;
+    if (v.guess === 'low' || v.guess === 'high') c.guess = v.guess;
+    const ids = ['match', 'five', 'arp', 'scale', 'minor', 'interval', 'sustain', 'echo', 'runs', 'harmony'];
+    c.sessions = Array.isArray(v.sessions) ? v.sessions.filter(x => isObj(x) && ids.includes(x.ex)).slice(-300).map(x => ({ d: typeof x.d === 'string' ? x.d.slice(0, 10) : '', ex: x.ex, score: Math.round(num(x.score, 0, 0, 100)), inTune: Math.round(num(x.inTune, 0, 0, 100)), cents: Math.round(num(x.cents, 0, -600, 600)), n: Math.round(num(x.n, 0, 0, 1000)) })) : [];
+    c.best = {}; if (isObj(v.best)) ids.forEach(k => { if (v.best[k] !== undefined) c.best[k] = Math.round(num(v.best[k], 0, 0, 100)); });
+    if (v.sustain !== undefined) c.sustain = Math.round(num(v.sustain, 0, 0, 600) * 10) / 10;
+    if (isObj(v.warm)) c.warm = { n: Math.round(num(v.warm.n, 0, 0, 100000)), last: typeof v.warm.last === 'string' ? v.warm.last.slice(0, 10) : '' };
+    c.lessons = {}; if (isObj(v.lessons)) Object.keys(v.lessons).forEach(k => { if (/^v-[a-z]{2,20}$/.test(k) && v.lessons[k] === true) c.lessons[k] = true; });
+    out.voice = c;
   }
   if (out.routines) {
     Object.keys(out.routines).forEach(k => {
       const r = out.routines[k];
       if (!/^[a-z0-9-]{1,40}$/.test(k) || !isObj(r)) { delete out.routines[k]; return; }
-      out.routines[k] = { n: Math.round(num(r.n, 0, 0, 100000)), mins: Math.round(num(r.mins, 0, 0, 10000000)), last: typeof r.last === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.last) ? r.last : '' };
+      const c = { n: Math.round(num(r.n, 0, 0, 100000)), mins: Math.round(num(r.mins, 0, 0, 10000000)), last: typeof r.last === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.last) ? r.last : '' };
+      if (r.played !== undefined) c.played = Math.round(num(r.played, 0, 0, 10000000));
+      if (r.lastPlayed !== undefined) c.lastPlayed = Math.round(num(r.lastPlayed, 0, 0, 1000));
+      if (r.lastTiming !== undefined) c.lastTiming = Math.round(num(r.lastTiming, 0, 0, 100));
+      out.routines[k] = c;
     });
   }
   if (out.practice) {

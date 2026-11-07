@@ -25,6 +25,7 @@ function exerciseMidis(ex, lo) {
   if (ex.type === 'chord') (ex.targets || []).forEach(t => add(chordMs(t)));
   else if (ex.type === 'perf') perfSequence(ex).forEach(t => add(t.notes ? t.notes.map(E.midiOf) : t.root ? chordHint(t, lo).midis : []));
   else if (ex.type === 'seq') add((ex.notes || []).map(n => E.parseToken(n).midi));
+  else if (ex.type === 'kbd') (ex.tasks || []).forEach(t => { if (t.k === 'note') add([t.midi]); if (t.k === 'notes' && t.midis) add(t.midis); if (t.k === 'chord') add(t.low ? (() => { let ms = E.chordMidi(t.root, t.quality, 2, 0); while (Math.max.apply(null, ms) > 54) ms = ms.map(m => m - 12); return ms; })() : chordHint(t, lo).midis); });
   return out;
 }
 /* widen a keyboard range to include the given keys: start on a C or F, end on an E or B, never narrower than asked */
@@ -415,6 +416,123 @@ function mountExercise(host, ex, opt) {
     };
     window.addEventListener('keydown', onKey); cleanups.push(() => window.removeEventListener('keydown', onKey));
     cleanups.push(stop);
+  }
+
+  /* ---- keyboard tasks: the app listens to the keyboard itself (Level 0) ----
+     Each task is checked from what the keyboard sends over USB: keys, chords, voice changes, the sustain
+     pedal, style start and stop, and tempo (its MIDI clock, or keys played on the clicks). Things a keyboard
+     cannot report (an effect setting, the screen) are ticked by the learner. Without a keyboard connected,
+     a listening task can be ticked by hand and is marked as not checked. */
+  if (ex.type === 'kbd') {
+    const tasks = ex.tasks, state = tasks.map(() => ({ ok: false, self: false, n: 0 }));
+    let stuck = false, stuckTimer = null;
+    const armStuck = () => { clearTimeout(stuckTimer); stuck = false; stuckTimer = setTimeout(() => { if (!done) { stuck = true; refresh(); } }, 15000); };
+    cleanups.push(() => clearTimeout(stuckTimer));
+    let cur = 0, held = new Set(), lastNotes = [], pedalUpAt = null, lastNoteAt = 0, taps = [], lastStart = -1e9, lastStop = -1e9;
+    const lowChord = t => { let ms = E.chordMidi(t.root, t.quality, 2, 0); while (Math.max.apply(null, ms) > 54) ms = ms.map(m => m - 12); return ms; };
+    const midiReady = () => typeof Midi !== 'undefined' && Midi.status === 'ready';
+    const listens = t => t.k !== 'self';
+    const word = t => ({ voice: 'Change the sound', pedal: 'Sustain pedal', legato: 'Pedal between chords', start: 'Start the style', stop: 'Stop the style', tempo: 'Tempo', note: 'Play a key', notes: 'Play the keys', chord: 'Play a chord', self: 'Do it and tick' })[t.k] || '';
+    refresh = () => {
+      const t = tasks[cur];
+      dots.innerHTML = tasks.map((x, i) => '<span class="pill' + (state[i].ok ? ' done' : i === cur && !done ? ' cur' : '') + '">' + (i + 1) + '</span>').join('');
+      board.innerHTML = '<ol class="kbd-tasks">' + tasks.map((x, i) => '<li class="' + (state[i].ok ? 'ok' : i === cur && !done ? 'cur' : '') + '"><b>' + esc(word(x)) + (state[i].self ? ' <span class="tag">ticked by you</span>' : state[i].ok && listens(x) ? ' <span class="tag ok">heard</span>' : '') + '</b><span>' + esc(x.text) + '</span>' +
+        (i === cur && !done ? '<span class="kbd-live tiny" id="kbdlive">' + esc(liveText(x)) + '</span>' +
+          (x.k === 'self' ? '<button class="btn soft sm" type="button" data-kbd="self">' + icon('check') + 'Done</button>' :
+            (!midiReady() ? '<span class="row wrap"><button class="btn primary sm" type="button" data-act="midiconnect">Connect your keyboard</button><button class="btn ghost sm" type="button" data-kbd="self">I did it (not checked)</button></span>' : (x.k === 'pedal' || x.k === 'legato') ? '<button class="btn ghost sm" type="button" data-kbd="self">I have no pedal yet: skip</button>' : stuck ? '<button class="btn ghost sm" type="button" data-kbd="self">The app does not hear it: tick it myself</button>' : '')) : '') + '</li>').join('') + '</ol>';
+      if (t && t.k === 'chord' && hints) piano.hint(t.low ? { midis: lowChord(t) } : chordHint(t, lo)); else if (t && (t.k === 'note' || t.k === 'notes') && hints) piano.hint({ midis: t.k === 'note' ? [t.midi] : t.midis || [] }); else piano.clear();
+    };
+    const liveText = t => {
+      if (t.k === 'voice') return Midi.lastProgram ? 'Last sound reported: ' + gmFamily(Midi.lastProgram.program, Midi.lastProgram.msb) + ' (program ' + (Midi.lastProgram.program + 1) + ').' : 'Waiting for a sound change…';
+      if (t.k === 'pedal') return 'Presses: ' + state[cur].n + ' of ' + (t.n || 3) + (Midi.pedalDown ? ' · pedal is down' : '');
+      if (t.k === 'legato') return 'Clean changes: ' + state[cur].n + ' of ' + (t.n || 4);
+      if (t.k === 'tempo') { const b = Midi.clockBpm(); return b ? 'Your keyboard says ' + b + ' BPM.' : (taps.length ? taps.length + ' keys played on the clicks.' : 'Waiting for the tempo…'); }
+      if (t.k === 'notes') return 'Played: ' + state[cur].n + ' of ' + (t.count || (t.midis || []).length);
+      return '';
+    };
+    const live = () => { const el = $('#kbdlive', host); if (el && tasks[cur]) el.textContent = liveText(tasks[cur]); };
+    const pass = (self) => {
+      state[cur].ok = true; state[cur].self = !!self; if (!self) piano.clear();
+      fb(self ? '' : 'Heard it. ' + (tasks[cur].ok || 'Well done.'), 'ok');
+      cur++; armStuck();
+      const nt = tasks[cur], now = performance.now();
+      if (nt && ((nt.k === 'start' && now - lastStart < 4000) || (nt.k === 'stop' && now - lastStop < 4000))) { setTimeout(() => { if (!done && tasks[cur] === nt) pass(false); }, 0); }
+      if (cur >= tasks.length) {
+        refresh();
+        const selfN = state.filter((x, i) => x.self && listens(tasks[i])).length;
+        finishOk({ total: tasks.length, accuracy: Math.round(100 * (tasks.length - selfN) / tasks.length), message: selfN ? 'Complete. ' + selfN + ' step' + (selfN > 1 ? 's were' : ' was') + ' ticked by you rather than heard by the app: connect your keyboard and repeat to be sure.' : 'Complete. Every step was heard from your keyboard.' });
+      } else refresh();
+    };
+    start = () => {
+      cur = 0; miss = 0; done = false; held = new Set(); taps = []; box.classList.remove('done'); fb('');
+      state.forEach(x => { x.ok = false; x.self = false; x.n = 0; x.hit = null; });
+      armStuck(); refresh();
+    };
+    host.addEventListener('click', e => { const b = e.target.closest('[data-kbd]'); if (!b || done) return; if (b.dataset.kbd === 'self') pass(true); });
+    cleanups.push(Input.listen(ev => {
+      if (done) return;
+      held.add(ev.midi); lastNoteAt = ev.t; lastNotes.push({ m: ev.midi, t: ev.t }); lastNotes = lastNotes.filter(n => ev.t - n.t < 2500);
+      const t = tasks[cur]; if (!t) return;
+      if (t.k === 'note') {
+        if (ev.midi === t.midi || (t.anyOctave && pcOf(ev.midi) === pcOf(t.midi))) { piano.ok(ev.midi); pass(false); }
+        else { miss++; piano.bad(ev.midi); fb('That was ' + noteWord(ev.midi) + '. Look for ' + noteWord(t.midi) + '.', 'bad'); }
+      } else if (t.k === 'notes') {
+        const want = t.midis ? t.midis.filter(m => !state[cur].hit || !state[cur].hit.has(m)) : null;
+        if (!state[cur].hit) state[cur].hit = new Set();
+        if (!t.midis || want.includes(ev.midi)) { state[cur].hit.add(ev.midi); state[cur].n = state[cur].hit.size; piano.ok(ev.midi); if (state[cur].n >= (t.count || t.midis.length)) pass(false); else live(); }
+        else { miss++; piano.bad(ev.midi); }
+      } else if (t.k === 'chord') {
+        const pcs = new Set(lastNotes.filter(n => ev.t - n.t < 1500 && held.has(n.m)).map(n => pcOf(n.m)));
+        const want = new Set(E.chordPcs(t.root, t.quality));
+        if (pcs.size === want.size && [...want].every(x => pcs.has(x))) { pass(false); }
+        else if (pcs.size >= want.size && pcs.size > 2) fb('Not that chord yet. ' + (hints ? 'Look at the lit keys.' : 'Turn on hints if you need them.'), 'bad');
+      } else if (t.k === 'tempo') {
+        taps.push(ev.t); taps = taps.slice(-9);
+        if (taps.length >= 8) {
+          const iv = []; for (let i = 1; i < taps.length; i++) iv.push(taps[i] - taps[i - 1]);
+          const avg = iv.reduce((a, x) => a + x, 0) / iv.length, bpm = 60000 / avg;
+          if (Math.abs(bpm - t.bpm) <= (t.tol || 4) && iv.every(x => Math.abs(x - avg) < avg * 0.2)) pass(false);
+          else fb('Those keys came at about ' + Math.round(bpm) + ' BPM. Set ' + t.bpm + ' on the keyboard and play one key on each click.', 'bad');
+        }
+        live();
+      } else if (t.k === 'legato') {
+        // a new chord starts; the pedal must then come up and go down again shortly after
+        state[cur].wait = ev.t;
+      }
+    }));
+    cleanups.push(Input.listenOff(ev => { held.delete(ev.midi); }));
+    if (typeof Midi !== 'undefined') cleanups.push(Midi.on(ev => {
+      if (ev.type === 'start') lastStart = ev.t; if (ev.type === 'stop') lastStop = ev.t;
+      if (done) return;
+      const t = tasks[cur]; if (!t) return;
+      if (t.k === 'voice' && ev.type === 'program') {
+        const fams = t.family ? [].concat(t.family) : null;
+        if (!fams || fams.includes(ev.family)) pass(false);
+        else { fb('That is ' + (/^[aeiou]/.test(ev.family) ? 'an ' : 'a ') + ev.family + ' sound. Keep looking for ' + fams.map(f => (/^[aeiou]/.test(f) ? 'an ' : 'a ') + f).join(' or ') + '.', 'bad'); live(); }
+      } else if (t.k === 'pedal' && ev.type === 'pedal') {
+        if (!ev.down) { state[cur].n++; if (state[cur].n >= (t.n || 3)) pass(false); else live(); } else live();
+      } else if (t.k === 'legato' && ev.type === 'pedal') {
+        // clean: the new chord first, then the pedal comes up (or was already up, for the very first catch) and goes down within a moment
+        if (!ev.down) { pedalUpAt = ev.t; return; }
+        const w = state[cur].wait; if (!w || ev.t - w > 1500) return;
+        const liftedAfter = pedalUpAt !== null && pedalUpAt >= w - 40;
+        const firstCatch = state[cur].n === 0 && (pedalUpAt === null || pedalUpAt < w - 40);
+        if (liftedAfter || firstCatch) {
+          state[cur].n++; state[cur].wait = 0; fb('Clean change.', 'ok');
+          if (state[cur].n >= (t.n || 4)) pass(false); else live();
+        } else fb('The pedal came up before the new chord. Play the chord first, then lift and press the pedal.', 'bad');
+      } else if (t.k === 'start' && ev.type === 'start') pass(false);
+      else if (t.k === 'stop' && ev.type === 'stop') pass(false);
+    }));
+    if (tasks.some(t => t.k === 'tempo') && typeof Midi !== 'undefined') {
+      const iv = setInterval(() => {
+        if (done) return; const t = tasks[cur]; if (!t || t.k !== 'tempo') return;
+        const b = Midi.clockBpm(); live();
+        if (b !== null && Math.abs(b - t.bpm) <= (t.tol || 2)) pass(false);
+      }, 500);
+      cleanups.push(() => clearInterval(iv));
+    }
+    if (typeof Midi !== 'undefined') { const prev = Midi.onChange; Midi.onChange = () => { if (prev) prev(); if (!done) refresh(); }; cleanups.push(() => { Midi.onChange = prev; }); }
   }
   start();
   return api;

@@ -538,3 +538,49 @@ input[type="range"] { width: 100%; accent-color: var(--accent); min-height: 32px
 .rt-min { color: var(--muted); padding-top: .15rem; }
 .rt-ready { padding: .7rem .9rem; border-radius: 12px; background: var(--ok-soft); }
 @media (max-width: 560px) { .rt-clock { font-size: 1.8rem; } .rt-blocks li { grid-template-columns: 1fr; gap: .2rem; } }
+
+/* Level 0 keyboard tasks: the app listens to the keyboard */
+.kbd-tasks { list-style: none; counter-reset: kt; padding: 0; margin: 0 0 .6rem; display: grid; gap: .45rem; text-align: left; }
+.kbd-tasks li { counter-increment: kt; display: grid; grid-template-columns: 1.8rem 1fr; column-gap: .6rem; row-gap: .25rem; padding: .6rem .75rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.kbd-tasks li::before { content: counter(kt); grid-row: span 4; width: 1.6rem; height: 1.6rem; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: .85rem; background: var(--line); }
+.kbd-tasks li > * { grid-column: 2; }
+.kbd-tasks li b .tag { margin-left: .4rem; }
+.kbd-tasks li.cur { border-color: var(--accent); background: var(--accent-soft); }
+.kbd-tasks li.cur::before { background: var(--accent); color: #fff; }
+.kbd-tasks li.ok { opacity: .7; }
+.kbd-tasks li.ok::before { content: '✓'; background: var(--ok); color: #fff; }
+.kbd-live { color: var(--muted); }
+
+/* Vocal Studio */
+.vx { display: grid; gap: .8rem; }
+.vx-head { display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: center; }
+.vx-instr { font-size: 1.1rem; margin: .2rem 0 0; }
+.vx-read { text-align: right; display: grid; justify-items: end; }
+.vx-read b { font-size: 2.6rem; line-height: 1; }
+.vx-read span { color: var(--muted); font-size: 1.1rem; min-height: 1.4em; }
+.vx-needle { position: relative; height: 14px; border-radius: 7px; background: var(--line); overflow: hidden; }
+.vx-needle .vx-zone { position: absolute; left: 25%; width: 50%; top: 0; bottom: 0; background: var(--ok-soft); }
+.vx-needle .vx-zone::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--ok); }
+.vx-needle i { position: absolute; top: -2px; width: 6px; height: 18px; margin-left: -3px; left: 50%; border-radius: 3px; background: var(--muted); transition: left .08s linear; }
+.vx-needle i.ok { background: var(--ok); } .vx-needle i.near { background: var(--warn); } .vx-needle i.far { background: var(--accent); }
+.vx-trace { width: 100%; height: 220px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.vx-targets { display: flex; flex-wrap: wrap; gap: .4rem; }
+.vx-t { display: grid; justify-items: center; min-width: 3.2rem; padding: .35rem .5rem; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); }
+.vx-t b { font-family: var(--font-mono); } .vx-t small { font-size: .75rem; color: var(--muted); } .vx-t small.mel { font-size: .7rem; }
+.vx-t.cur { border-color: var(--accent); background: var(--accent-soft); }
+.vx-t.ok { border-color: var(--ok); background: var(--ok-soft); }
+.vx-t.off { border-color: var(--warn); }
+.vx-t.miss { opacity: .55; }
+.vx-fb { min-height: 1.4em; margin: 0; } .vx-fb.ok { color: var(--ok); } .vx-fb.bad { color: var(--accent); }
+.vx-sum { padding: 1rem; border-radius: 12px; background: var(--ok-soft); }
+.vx-sum h3 { margin: 0 0 .3rem; font-size: 1.8rem; }
+.vx-range { display: flex; gap: 2rem; font-size: 1.1rem; } .vx-range b { font-family: var(--font-mono); font-size: 1.5rem; margin-left: .4rem; }
+.vx-mic { align-items: flex-end; } .vx-mic .field { margin: 0; min-width: 16rem; }
+.vx-steps { margin: .4rem 0 .8rem; padding-left: 1.3rem; } .vx-steps li { margin: .15rem 0; }
+.vx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+.vx-grid .card { margin: 0; display: flex; flex-direction: column; } .vx-grid .card .btn { margin-top: auto; align-self: flex-start; }
+.vx-bars { display: flex; align-items: flex-end; gap: 4px; height: 90px; margin-top: .6rem; }
+.vx-bars span { flex: 1; background: var(--accent); border-radius: 4px 4px 0 0; opacity: .8; }
+.vx-best, .vx-recent { list-style: none; padding: 0; margin: 0; }
+.vx-best li, .vx-recent li { display: flex; justify-content: space-between; gap: 1rem; padding: .35rem 0; border-bottom: 1px solid var(--line); }
+@media (max-width: 560px) { .vx-read b { font-size: 2rem; } .vx-trace { height: 160px; } }

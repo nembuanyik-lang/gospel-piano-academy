@@ -4529,8 +4529,704 @@ LESSONS.push.apply(LESSONS, MS.lessons);
 MODULES.push(...MS.modules);
 LEVELS.push({ id: 'M', name: 'Level 5', title: 'Mastery', goal: 'Lead, arrange and minister like a seasoned minister of music, and produce and release your own songs.' });
 
+/* ===================== BATCH K · Level 0 · Your keyboard: Yamaha YPT-240 =====================
+   Learn the instrument itself, from its owner's manual (the YPT-240 shares it with the PSR-E243).
+   Exercises use the 'kbd' type: the app listens to the keyboard over USB and ticks each step when it
+   hears it (keys, chords, voice changes, the sustain pedal, style start/stop and tempo). Steps a keyboard
+   cannot report, such as an effect setting, are ticked by the learner. */
+const KT = (k, text, o) => Object.assign({ k, text }, o || {});
+const KB = (prompt, tasks, o) => Object.assign({ type: 'kbd', prompt, tasks }, o || {});
+const KC = (root, quality, text, o) => KT('chord', text, Object.assign({ root, quality }, o || {}));
+const KALLC = [36, 48, 60, 72, 84, 96];
+const KS = { lessons: [], modules: [] };
+KS.lessons.push(
+{
+  id: 'k-setup', cat: 'Your keyboard', title: 'Set up and switch on', minutes: 8,
+  why: 'A minister of music must trust the instrument. Knowing how to power, connect and reset your keyboard means no surprises before a service.',
+  objective: 'Power the YPT-240, set the volume, find the sockets on the back, and find every C on its 61 keys.',
+  theory: [
+    'Power: use the PA-130 adaptor in the DC IN socket, or six AA batteries. If you use batteries, tell the keyboard which kind in the FUNCTION settings (Battery Type), so it can show the right level.',
+    'Switch on with the Standby/On switch, then turn [MASTER VOLUME] to about half. Always start low before you plug into speakers or headphones.',
+    'The back has four sockets: SUSTAIN (for a sustain pedal), USB TO HOST (to a computer), PHONES/OUTPUT (headphones, or a cable to an amplifier or mixer) and DC IN (power).',
+    'Your keyboard has 61 keys: five octaves from a low C to a high C. Middle C is the third C from the left. The keys are not touch-sensitive: every note plays at the same loudness, however hard you press.',
+    'The keyboard switches itself off after 30 minutes without use (Auto Power Off). You can change this in the FUNCTION settings.'
+  ],
+  play: KB('Switch on and find the important keys. Connect your keyboard to the app first if you can (USB cable, then Connect).', [
+    KT('self', 'Switch on with the Standby/On switch and set [MASTER VOLUME] to about half.'),
+    KT('note', 'Play the lowest key on your keyboard. It is a C.', { midi: 36, ok: 'That is the lowest C.' }),
+    KT('note', 'Play the highest key. It is also a C.', { midi: 96, ok: 'That is the highest C.' }),
+    KT('note', 'Play middle C: the third C from the left.', { midi: 60, ok: 'Middle C.' })
+  ], { hints: true }),
+  practice: [
+    KB('Play every C from the bottom to the top.', [KT('notes', 'Play all six Cs, from the lowest to the highest.', { midis: KALLC })], { hints: true }),
+    KB('Listen to your keyboard.', [
+      KT('self', 'Press [DEMO] and listen for a moment. Press [DEMO] again to stop.'),
+      KT('self', 'Plug headphones into PHONES/OUTPUT. The speakers go quiet. Unplug them again.')
+    ])
+  ],
+  apply: { text: 'Before every service or rehearsal: power on, volume low, check the sockets you need, play a few notes. It takes one minute and prevents most problems.' },
+  challenge: KB('Challenge: find the keys without help.', [
+    KT('notes', 'Play all six Cs, in any order, with hints off.', { midis: KALLC }),
+    KT('note', 'Play middle C.', { midi: 60 })
+  ], { hints: false }),
+  quiz: [
+    q('How many keys does the YPT-240 have?', ['49', '61', '76', '88'], 1, 'It has 61 keys: five octaves, C to C.'),
+    q('Where does a sustain pedal plug in?', ['DC IN', 'USB TO HOST', 'SUSTAIN', 'PHONES/OUTPUT'], 2, 'The SUSTAIN socket on the back.'),
+    q('What happens when you press a key harder on this keyboard?', ['It plays louder', 'It plays the same loudness', 'It plays an octave higher', 'It sustains'], 1, 'The YPT-240 is not touch-sensitive, so every note has the same loudness.')
+  ]
+},
+{
+  id: 'k-panel', cat: 'Your keyboard', title: 'The buttons and the screen', minutes: 8, req: ['k-setup'],
+  why: 'When you know what every button does, you can change sound, rhythm or tempo in seconds, even in the middle of a song.',
+  objective: 'Know the three mode buttons, the number buttons, and the most-used buttons on the panel.',
+  theory: [
+    'Three buttons decide what the number buttons change: [VOICE] (the sound you play), [STYLE] (a rhythm and accompaniment) and [SONG] (the built-in songs). The screen shows the number and name.',
+    'Choose a number with the number buttons [0] to [9], or step up and down with [+] and [-].',
+    '[PORTABLE GRAND] takes you straight back to the grand piano sound. It is the safest button on the keyboard.',
+    '[FUNCTION] opens the settings (transpose, tuning, volumes, effects and more). Press it again to move to the next setting; leave by pressing [VOICE], [STYLE] or [SONG].',
+    'Other buttons you will use: [METRONOME], [TEMPO/TAP], [START/STOP], and for styles [ACMP ON/OFF], [SYNC START], [INTRO/ENDING/rit.] and [MAIN/AUTO FILL].'
+  ],
+  play: KB('Change the sound from the panel. The app hears every sound change.', [
+    KT('voice', 'Press [VOICE], then press [+] once. The screen shows a new sound name.'),
+    KT('voice', 'Press [PORTABLE GRAND] to go back to the grand piano.', { family: 'piano' }),
+    KC('C', 'major', 'Play a C major chord (C E G) to hear it.')
+  ], { hints: true }),
+  practice: [
+    KB('Visit each mode.', [
+      KT('self', 'Press [STYLE] and read the style number and name on the screen.'),
+      KT('self', 'Press [SONG] and read the song number and name.'),
+      KT('voice', 'Press [VOICE], type 0 0 3 with the number buttons (Bright Piano).', { family: 'piano' })
+    ]),
+    KB('Open the settings and leave them again.', [
+      KT('self', 'Press [FUNCTION]. The screen shows the first setting. Press [FUNCTION] two more times and watch the setting names change.'),
+      KT('self', 'Press [VOICE] to leave the settings.')
+    ])
+  ],
+  apply: { text: 'In church, [PORTABLE GRAND] is your safe place: if you are lost in the settings or a strange sound appears, press it and you are back to piano.' },
+  challenge: KB('Challenge: change sounds quickly and come home to piano.', [
+    KT('voice', 'Press [VOICE] and choose any sound with [+] or [-].'),
+    KT('voice', 'Press [VOICE] and type 0 0 3.', { family: 'piano' }),
+    KT('voice', 'Choose any other sound.'),
+    KT('voice', 'Press [PORTABLE GRAND].', { family: 'piano' })
+  ]),
+  quiz: [
+    q('Which button makes the number buttons choose a rhythm?', ['[VOICE]', '[STYLE]', '[SONG]', '[DEMO]'], 1, '[STYLE] chooses the rhythm and accompaniment.'),
+    q('Which button takes you straight back to the grand piano?', ['[FUNCTION]', '[PORTABLE GRAND]', '[METRONOME]', '[START/STOP]'], 1, '[PORTABLE GRAND] recalls the piano sound.'),
+    q('How do you leave the FUNCTION settings?', ['Switch off', 'Press [VOICE], [STYLE] or [SONG]', 'Press [DEMO]', 'Wait one minute'], 1, 'Pressing a mode button leaves the settings.')
+  ]
+},
+{
+  id: 'k-connect', cat: 'Your keyboard', title: 'Connect to the app and the computer', minutes: 10, req: ['k-panel'],
+  why: 'Connected by USB, the keyboard becomes a teacher: the app hears what you play and checks it, and later you can record into FL Studio.',
+  objective: 'Connect by USB, check that the app hears keys, chords and sound changes, and control the double sound.',
+  theory: [
+    'Use a USB cable with a flat end (A) for the computer and a square end (B) for the keyboard\'s USB TO HOST socket, like a printer cable. Keep it under 3 metres. USB 3.0 cables are not supported.',
+    'Switch the keyboard on, then in the app open Profile > Settings > MIDI keyboard and press Connect. Windows usually needs no driver.',
+    'Over USB the keyboard tells the computer every key you play, the sustain pedal, when you change voice, and when a style starts or stops. It does not send how hard you press, because the keys are not touch-sensitive.',
+    'You will hear two sounds: the keyboard\'s and the app\'s. Turn one down. Or use Local Control in the FUNCTION settings: OFF makes the keyboard silent while it still talks to the computer. Always set it back ON afterwards, or the keyboard will seem broken.',
+    'Only one program can use the keyboard at a time on most computers. Close the app before you open FL Studio, and the other way round.'
+  ],
+  play: KB('Check the connection.', [
+    KT('notes', 'Play any five keys. The app counts them.', { count: 5 }),
+    KC('C', 'major', 'Play a C major chord.'),
+    KT('voice', 'Change the voice with [+] or [-]. The app hears it.')
+  ], { hints: true }),
+  practice: [
+    KB('Play a short line and a chord.', [
+      KT('notes', 'Play C D E F G from middle C.', { midis: [60, 62, 64, 65, 67] }),
+      KC('F', 'major', 'Play F major (F A C).'),
+      KC('G', 'major', 'Play G major (G B D).')
+    ], { hints: true }),
+    KB('Try Local Control.', [
+      KT('self', 'Press [FUNCTION] until the screen shows Local Control. Set it OFF with [-]. Play: only the app sounds now.'),
+      KT('notes', 'Play any three keys (the app still hears them).', { count: 3 }),
+      KT('self', 'Set Local Control back ON with [+]. Press [VOICE] to leave the settings.')
+    ])
+  ],
+  apply: { text: 'Connect the keyboard every time you study. Exercises, chord checks and tests then use your real keys, which builds real skill much faster than clicking.' },
+  challenge: KB('Challenge: prove the connection works end to end.', [
+    KT('notes', 'Play C D E F G from middle C.', { midis: [60, 62, 64, 65, 67] }),
+    KC('A', 'minor', 'Play A minor (A C E).'),
+    KT('voice', 'Change the voice.'),
+    KT('voice', 'Press [PORTABLE GRAND].', { family: 'piano' })
+  ], { hints: false }),
+  quiz: [
+    q('Which socket connects the keyboard to the computer?', ['PHONES/OUTPUT', 'USB TO HOST', 'SUSTAIN', 'DC IN'], 1, 'USB TO HOST, with an A-to-B USB cable.'),
+    q('Local Control OFF means…', ['The keyboard is silent but still sends notes to the computer', 'The keyboard switches off', 'USB is disconnected', 'The volume is at maximum'], 0, 'Local Control OFF silences the keyboard\'s own sound; set it back ON afterwards.'),
+    q('Can the app and FL Studio use the keyboard at the same time?', ['Yes, always', 'Usually not: close one first', 'Only with batteries', 'Only with headphones'], 1, 'On most computers only one program can open the keyboard at a time.')
+  ]
+});
+
+KS.lessons.push(
+{
+  id: 'k-voices', cat: 'Your keyboard', title: 'Choosing a voice', minutes: 9, req: ['k-connect'],
+  why: 'The right sound changes how a song feels: piano for most songs, organ for hymns, strings for prayer. Finding it fast is a ministry skill.',
+  objective: 'Choose voices by number and by stepping, and find a piano, an organ, strings and a choir.',
+  theory: [
+    'Press [VOICE], then type a three-digit number, or step with [+] and [-]. The screen shows the number and the name.',
+    'Voices 001 to 139 are the main instrument voices (with some sound effects). 140 to 152 are drum kits and sound effects. 153 to 385 are extra voices (XGlite).',
+    'Example from the manual: 003 is Bright Piano. Voice 000 is One Touch Setting: it picks a voice that suits the style or song you choose.',
+    'Voices 122 to 131 are Dual voices: two sounds layered together, such as piano with strings.',
+    'When you change voice, the keyboard tells the app which family of sound it is (piano, organ, strings, choir and so on). The app uses that to check your choices.'
+  ],
+  play: KB('Find sounds. Step with [+] or [-] and read the names on the screen.', [
+    KT('voice', 'Press [VOICE] and type 0 0 3 (Bright Piano).', { family: 'piano' }),
+    KT('voice', 'Step with [+] until the screen shows an organ. Stop on it.', { family: 'organ', ok: 'That is an organ.' }),
+    KC('C', 'major', 'Hold a C chord and listen to the organ.')
+  ], { hints: true }),
+  practice: [
+    KB('Strings and choir.', [
+      KT('voice', 'Find a strings sound (the name says Strings).', { family: 'strings' }),
+      KC('F', 'major', 'Hold an F chord: notice how strings swell.'),
+      KT('voice', 'Find a choir sound (Choir or Aahs).', { family: 'choir' }),
+      KC('G', 'major', 'Hold a G chord.')
+    ], { hints: true }),
+    KB('Layered sounds.', [
+      KT('self', 'Press [VOICE] and type 1 2 2. Step up to 1 3 1 with [+], playing a chord on each. Choose the layer you like best and write its number in your notebook.'),
+      KT('voice', 'Press [PORTABLE GRAND].', { family: 'piano' })
+    ])
+  ],
+  apply: { text: 'Write down in your notebook the numbers of your favourite piano, organ, strings and choir. In a service you will not have time to search.' },
+  challenge: KB('Challenge: four families, then home.', [
+    KT('voice', 'Choose an organ.', { family: 'organ' }),
+    KT('voice', 'Choose strings.', { family: 'strings' }),
+    KT('voice', 'Choose a choir.', { family: 'choir' }),
+    KT('voice', 'Back to piano.', { family: 'piano' })
+  ]),
+  quiz: [
+    q('What is voice 003?', ['Organ', 'Bright Piano', 'Strings', 'Drum kit'], 1, 'The manual\'s example: 003 is Bright Piano.'),
+    q('Voices 122 to 131 are…', ['Drum kits', 'Dual (layered) voices', 'Sound effects', 'Songs'], 1, 'They play two sounds together.'),
+    q('What does voice 000 do?', ['Mutes the keyboard', 'One Touch Setting: picks a voice to suit the style or song', 'Plays the demo', 'Resets everything'], 1, '000 turns on One Touch Setting.')
+  ]
+},
+{
+  id: 'k-worship-sounds', cat: 'Your keyboard', title: 'Your worship sounds', minutes: 10, req: ['k-voices'],
+  why: 'Each moment of a service calls for a sound: bright piano for praise, warm organ for hymns, soft strings or pads under prayer.',
+  objective: 'Choose and play the right sound for praise, hymns, prayer and ballads, and switch between them smoothly.',
+  theory: [
+    'Piano: most songs, praise and ballads. It is clear, so the singers can follow it.',
+    'Organ: hymns and traditional gospel. Hold chords long and play fewer notes; the organ does not fade like a piano.',
+    'Strings and pads: slow worship, prayer and altar calls. Play slow chord changes and let them swell.',
+    'Choir (Aahs): a soft human colour under worship. Keep it low in volume.',
+    'Electric piano: soft contemporary songs. Change sounds between sections, never in the middle of a line.'
+  ],
+  play: KB('Play the same progression with three different sounds.', [
+    KT('voice', 'Choose an organ.', { family: 'organ' }),
+    KC('C', 'major', 'C'), KC('F', 'major', 'F'), KC('G', 'major', 'G'),
+    KT('voice', 'Choose strings.', { family: 'strings' }),
+    KC('C', 'major', 'C, held for 4 beats'), KC('F', 'major', 'F, held for 4 beats')
+  ], { hints: true }),
+  practice: [
+    KB('A prayer pad.', [
+      KT('voice', 'Choose a pad or a strings sound.', { family: ['strings', 'pad'] }),
+      KC('C', 'sus2', 'Csus2 (C D G): hold it.'),
+      KC('A', 'minor', 'A minor: hold it.'),
+      KC('F', 'major', 'F: hold it.')
+    ], { hints: true }),
+    KB('An electric piano for a soft song.', [
+      KT('voice', 'Find an electric piano.', { family: 'electric piano' }),
+      KC('C', 'maj7', 'Cmaj7'), KC('A', 'm7', 'Am7'), KC('D', 'm7', 'Dm7'), KC('G', '7', 'G7')
+    ], { hints: true })
+  ],
+  apply: { text: 'Plan the sounds of a service: piano for the opening praise, organ for the hymn, strings under prayer. Write the numbers on a card on your music rest.' },
+  challenge: KB('Challenge: a service in four sounds.', [
+    KT('voice', 'Praise: piano.', { family: 'piano' }), KC('G', 'major', 'G'),
+    KT('voice', 'Hymn: organ.', { family: 'organ' }), KC('C', 'major', 'C'),
+    KT('voice', 'Prayer: strings.', { family: 'strings' }), KC('F', 'major', 'F'),
+    KT('voice', 'Back to piano.', { family: 'piano' })
+  ], { hints: false }),
+  quiz: [
+    q('Which sound fits a traditional hymn best?', ['Drum kit', 'Organ', 'Synth lead', 'Sound effect'], 1, 'Organ is the classic hymn sound.'),
+    q('When should you change sounds?', ['In the middle of a line', 'Between sections', 'On every chord', 'Never'], 1, 'Change between sections so the singers are not distracted.'),
+    q('Under prayer, strings or pads sound best with…', ['Fast chord changes', 'Slow, held chords', 'Loud runs', 'Drum patterns'], 1, 'Slow, held chords let the sound swell gently.')
+  ]
+},
+{
+  id: 'k-effects', cat: 'Your keyboard', title: 'Reverb, chorus, Ultra-Wide Stereo and EQ', minutes: 8, req: ['k-worship-sounds'],
+  why: 'Effects decide whether your keyboard sounds natural in the room or harsh and dry. A few settings make a big difference.',
+  objective: 'Set reverb and chorus, use [ULTRA-WIDE STEREO], and choose a Master EQ for speakers or headphones.',
+  theory: [
+    'Reverb adds the echo of a room or hall. A little makes the piano sound natural; too much makes it blurry in a church that already echoes.',
+    'Chorus makes a sound wider and richer. It suits electric piano and strings more than piano.',
+    'Reverb type, reverb depth, chorus type and chorus depth are in the FUNCTION settings: press [FUNCTION] until the screen shows the name, then change it with [+] and [-].',
+    '[ULTRA-WIDE STEREO] makes the sound wider than the speakers. It has three types. It is lovely in headphones, but turn it off when you play through the church system.',
+    'Master EQ (in FUNCTION) shapes the overall tone with six types, for the built-in speakers, headphones or external speakers.'
+  ],
+  play: KB('Hear what reverb does.', [
+    KT('self', 'Press [FUNCTION] until the screen shows Reverb Type. Step through the types with [+], playing a chord each time.'),
+    KC('C', 'major', 'Play C major and listen to the room sound.'),
+    KT('self', 'Press [VOICE] to leave the settings.')
+  ], { hints: true }),
+  practice: [
+    KB('Ultra-Wide Stereo.', [
+      KT('self', 'Put on headphones. Press [ULTRA-WIDE STEREO] to switch it on and off while you hold a chord.'),
+      KC('F', 'maj7', 'Hold Fmaj7 and listen to the width.')
+    ], { hints: true }),
+    KB('Master EQ.', [
+      KT('self', 'Press [FUNCTION] until the screen shows Master EQ. Try each type and choose the clearest one for your speakers.'),
+      KT('self', 'Press [VOICE] to leave the settings.')
+    ])
+  ],
+  apply: { text: 'In a hall that already echoes, use less reverb. Through the church sound system, turn Ultra-Wide Stereo off and let the sound engineer add effects.' },
+  challenge: KB('Challenge: set up a clean church sound.', [
+    KT('self', 'Choose a reverb type that sounds like a room, not a big hall.'),
+    KT('self', 'Switch [ULTRA-WIDE STEREO] off.'),
+    KT('voice', 'Press [PORTABLE GRAND].', { family: 'piano' }),
+    KC('G', 'major', 'Play G major to check the sound.')
+  ]),
+  quiz: [
+    q('Which effect adds the echo of a room?', ['Chorus', 'Reverb', 'Transpose', 'Metronome'], 1, 'Reverb adds room echo.'),
+    q('When should Ultra-Wide Stereo usually be off?', ['In headphones', 'Through the church sound system', 'When practising alone', 'Never'], 1, 'Turn it off through the PA so the engineer gets a natural sound.'),
+    q('Where are reverb and chorus settings?', ['In [FUNCTION]', 'In [SONG]', 'On the back panel', 'In the demo'], 0, 'They are FUNCTION settings.')
+  ]
+});
+
+KS.lessons.push(
+{
+  id: 'k-metronome', cat: 'Your keyboard', title: 'Metronome, tempo and time signature', minutes: 9, req: ['k-effects'],
+  why: 'Steady time is the first duty of the keyboardist. The keyboard\'s own metronome goes with you everywhere, even without the computer.',
+  objective: 'Start the metronome, set any tempo, tap a tempo, and set the time signature.',
+  theory: [
+    'Press [METRONOME] to start the click and again to stop it.',
+    'Press [TEMPO/TAP], then type the tempo or use [+] and [-]. The range is 11 to 280 BPM. Press [+] and [-] together to go back to the normal tempo.',
+    'Tap tempo: while nothing is playing, press [TEMPO/TAP] several times at the speed you want.',
+    'Press and hold [METRONOME] to set the time signature (beats per bar): 4 for most songs, 3 for a waltz. Metronome Volume is the next setting.',
+    'The app checks your tempo by listening to you: play one key on each click and it measures the speed.'
+  ],
+  play: KB('Set 80 BPM and play with the click.', [
+    KT('self', 'Press [TEMPO/TAP] and type 0 8 0. Press [METRONOME] to start the click.'),
+    KT('tempo', 'Play any key on each click, at least 8 times.', { bpm: 80, tol: 5 })
+  ]),
+  practice: [
+    KB('Slow and fast.', [
+      KT('self', 'Set the tempo to 60.'),
+      KT('tempo', 'Play one key on each click.', { bpm: 60, tol: 4 }),
+      KT('self', 'Set the tempo to 100.'),
+      KT('tempo', 'Play one key on each click.', { bpm: 100, tol: 5 })
+    ]),
+    KB('Time signature.', [
+      KT('self', 'Press and hold [METRONOME]. Set the beats per bar to 3 with [-]. Start the metronome: hear the waltz.'),
+      KT('self', 'Set it back to 4.')
+    ])
+  ],
+  apply: { text: 'Use the keyboard\'s metronome for your At your piano routines and for learning songs. Slow worship is often 60 to 72 BPM; mid-tempo 90 to 110.' },
+  challenge: KB('Challenge: two tempos, set and played.', [
+    KT('self', 'Set 72 BPM and start the metronome.'),
+    KT('tempo', 'Play one key on each click.', { bpm: 72, tol: 4 }),
+    KT('self', 'Set 110 BPM.'),
+    KT('tempo', 'Play one key on each click.', { bpm: 110, tol: 5 })
+  ]),
+  quiz: [
+    q('How do you reset the tempo to normal?', ['Switch off', 'Press [+] and [-] together', 'Press [DEMO]', 'Hold [VOICE]'], 1, 'Pressing [+] and [-] together restores the default tempo.'),
+    q('How do you set the time signature?', ['Hold [METRONOME]', 'Press [SONG]', 'Press [STYLE] twice', 'Use the pedal'], 0, 'Press and hold [METRONOME].'),
+    q('What is the tempo range of the YPT-240?', ['40 to 200', '11 to 280', '60 to 120', '1 to 500'], 1, 'From 11 to 280 BPM.')
+  ]
+},
+{
+  id: 'k-transpose', cat: 'Your keyboard', title: 'Transpose, tuning and octave', minutes: 9, req: ['k-metronome'],
+  why: 'Singers often need a song higher or lower. Transpose lets you play the shapes you know while the congregation hears the key they need.',
+  objective: 'Transpose up and down, put it back to 0, and know about tuning and octave.',
+  theory: [
+    'Transpose is FUNCTION setting 003: from -12 to +12 half steps. At +2 you play C and the keyboard sounds D.',
+    'Use it when a singer needs a different key and you only know the song in one key. But learn songs in many keys too: transpose is a help, not a crutch.',
+    'Always put Transpose back to 00 after the song. Forgetting it is a common mistake: everything you play will be in the wrong key.',
+    'Tuning (FUNCTION 004) moves the whole keyboard slightly, from 427.0 to 453.0 Hz (normal is 440.0), to match an instrument that cannot be tuned.',
+    'Octave (FUNCTION 007) moves the keyboard up or down by octaves.'
+  ],
+  listen: [{ label: 'Reference: D (the note you should hear at +2)', spec: { kind: 'notes', notes: ['D4'], d: 1.6 } }, { label: 'Reference: B♭ (the note you should hear at -2)', spec: { kind: 'notes', notes: ['Bb3'], d: 1.6 } }],
+  play: KB('Transpose up a whole step.', [
+    KT('self', 'Press [FUNCTION] until the screen shows Transpose (003). Press [+] twice to reach 02.'),
+    KT('notes', 'Play middle C. Compare it with the reference D above: they should sound the same.', { count: 1 }),
+    KT('self', 'Set Transpose back to 00. Press [VOICE] to leave.')
+  ], { hints: true }),
+  practice: [
+    KB('Down a whole step.', [
+      KT('self', 'Set Transpose to -02.'),
+      KT('notes', 'Play a C chord (C E G): it sounds like B♭.', { count: 3 }),
+      KT('self', 'Set Transpose back to 00.')
+    ], { hints: true }),
+    KB('Octave.', [
+      KT('self', 'Press [FUNCTION] until the screen shows Octave. Set +1 and play: everything sounds an octave higher. Set it back to 0.'),
+      KT('note', 'Play middle C to check you are back to normal.', { midi: 60 })
+    ], { hints: true })
+  ],
+  apply: { text: 'Write "TRANSPOSE 00?" on a card on your music rest. Check it before every service.' },
+  challenge: KB('Challenge: up for the singer, then back.', [
+    KT('self', 'Set Transpose to +03.'),
+    KT('notes', 'Play a C major chord (it sounds as E♭).', { count: 3 }),
+    KT('notes', 'Play a G major chord (it sounds as B♭).', { count: 3 }),
+    KT('self', 'Set Transpose back to 00.')
+  ], { hints: false }),
+  quiz: [
+    q('At Transpose +2, you play C. What sounds?', ['B♭', 'C', 'D', 'E'], 2, '+2 half steps from C is D.'),
+    q('What should you always do after a transposed song?', ['Switch off', 'Set Transpose back to 00', 'Change the voice', 'Turn up the volume'], 1, 'Otherwise the next song is in the wrong key.'),
+    q('Normal tuning is…', ['427.0 Hz', '440.0 Hz', '453.0 Hz', '415.0 Hz'], 1, 'A = 440 Hz is the standard.')
+  ]
+},
+{
+  id: 'k-pedal', cat: 'Your keyboard', title: 'The sustain pedal', minutes: 10, req: ['k-transpose'],
+  why: 'The sustain pedal connects chords and gives the piano its singing sound. Used badly, it blurs everything; used well, it is beautiful.',
+  objective: 'Connect a sustain pedal and change it cleanly between chords (legato pedalling).',
+  theory: [
+    'Plug a sustain pedal (for example a Yamaha FC4 or FC5, or any simple footswitch) into the SUSTAIN socket before you switch on. Do not press it while switching on.',
+    'Legato pedalling: play the new chord first, then lift the pedal and press it down again straight away. The new chord is caught by the pedal and the old one is cleared.',
+    'Lifting before the new chord leaves a gap. Not lifting at all blurs the chords together.',
+    'No pedal yet? Panel Sustain in the FUNCTION settings adds a short sustain to every note.',
+    'The pedal is sent to the app over USB, so it can check your pedalling.'
+  ],
+  play: KB('Check the pedal.', [
+    KT('pedal', 'Press and release the pedal three times.', { n: 3 })
+  ]),
+  practice: [
+    KB('Clean changes: play the chord, then lift and press the pedal.', [
+      KT('legato', 'Play C, F, G, C, changing the pedal cleanly after each new chord.', { n: 4 })
+    ]),
+    KB('Slow worship with the pedal.', [
+      KC('C', 'major', 'C'), KC('A', 'minor', 'Am'), KC('F', 'major', 'F'), KC('G', 'major', 'G'),
+      KT('legato', 'Now the same four chords with clean pedal changes.', { n: 4 })
+    ], { hints: true })
+  ],
+  apply: { text: 'Pedal with your ear: if it sounds muddy, change the pedal more often. In organ and strings sounds you usually do not need the pedal.' },
+  challenge: KB('Challenge: six clean pedal changes in a row.', [
+    KT('legato', 'Play any six chords, changing the pedal cleanly after each one.', { n: 6 })
+  ]),
+  quiz: [
+    q('In legato pedalling, when do you lift the pedal?', ['Before the new chord', 'Just after playing the new chord', 'Never', 'At the end of the song'], 1, 'Play the chord, then lift and press.'),
+    q('What happens if you never lift the pedal?', ['Silence', 'Chords blur together', 'The keyboard switches off', 'Nothing'], 1, 'All the chords ring together.'),
+    q('No pedal? Which setting adds sustain?', ['Panel Sustain', 'Transpose', 'Local Control', 'Octave'], 0, 'Panel Sustain in FUNCTION.')
+  ]
+});
+
+KS.lessons.push(
+{
+  id: 'k-styles', cat: 'Your keyboard', title: 'Start and stop a style', minutes: 8, req: ['k-pedal'],
+  why: 'Styles are built-in rhythms with drums and bass. They are a practice partner and, used with care, a small band.',
+  objective: 'Choose a style, set its tempo, and start and stop it.',
+  theory: [
+    'Press [STYLE] and choose a number (there are 100). The screen shows the name.',
+    '[START/STOP] starts the rhythm (drums only, without chords) and stops it.',
+    'Set the tempo with [TEMPO/TAP] before you start, or while it plays.',
+    'Styles 093 to 100 are Pianist styles: piano accompaniment without drums. They are useful for hymns and gentle songs.',
+    'When a style starts or stops, the keyboard tells the app, so the app can check you.'
+  ],
+  play: KB('Start and stop a rhythm.', [
+    KT('self', 'Press [STYLE] and choose any style with [+] or [-].'),
+    KT('start', 'Press [START/STOP]: the rhythm starts.'),
+    KT('stop', 'Press [START/STOP] again: it stops.')
+  ]),
+  practice: [
+    KB('Set the tempo of a style.', [
+      KT('self', 'Press [TEMPO/TAP] and type 0 9 0.'),
+      KT('start', 'Start the style.'),
+      KT('tempo', 'Play one key on each beat (or let the app read your keyboard\'s clock).', { bpm: 90, tol: 5 }),
+      KT('stop', 'Stop the style.')
+    ])
+  ],
+  apply: { text: 'Practise songs and routines with a style instead of a plain click: it trains you to lock with drums and bass, like playing with a band.' },
+  challenge: KB('Challenge: slow ballad tempo.', [
+    KT('self', 'Choose a style and set the tempo to 72.'),
+    KT('start', 'Start it.'),
+    KT('tempo', 'Play one key on each beat.', { bpm: 72, tol: 4 }),
+    KT('stop', 'Stop it.')
+  ]),
+  quiz: [
+    q('How many styles does the YPT-240 have?', ['10', '50', '100', '385'], 2, 'It has 100 styles.'),
+    q('What are styles 093 to 100?', ['Drum kits', 'Pianist styles with no drums', 'Songs', 'Sound effects'], 1, 'Pianist styles play piano accompaniment without drums.'),
+    q('Which button starts and stops a style?', ['[START/STOP]', '[DEMO]', '[FUNCTION]', '[VOICE]'], 0, '[START/STOP].')
+  ]
+},
+{
+  id: 'k-acmp', cat: 'Your keyboard', title: 'Chords with the left hand (ACMP)', minutes: 10, req: ['k-styles'],
+  why: 'With accompaniment on, the keyboard follows the chords of your left hand with bass and band parts. It shows clearly whether your chords are right.',
+  objective: 'Turn on accompaniment, start with Sync Start, and change chords in the left-hand area.',
+  theory: [
+    'Press [ACMP ON/OFF] to turn on accompaniment. The keys to the left of the split point (F♯ below the second C, by default) become the chord area.',
+    'Play full chords there (Multi Finger). The keyboard recognises the chord and the bass and band follow it.',
+    '[SYNC START]: press it, then the style starts the moment you play a chord in the chord area. This is how you start exactly on the beat.',
+    'The split point can be moved in the FUNCTION settings (Split Point).',
+    'Your right hand plays the melody or chords above the split point.'
+  ],
+  play: KB('Start a style from a chord.', [
+    KT('self', 'Choose a style. Press [ACMP ON/OFF] (the screen shows ACMP) and then [SYNC START].'),
+    KC('C', 'major', 'Play a C chord in the left-hand area (the lowest keys).', { low: true }),
+    KT('start', 'The style starts by itself.'),
+    KC('F', 'major', 'Change to F in the left hand.', { low: true }),
+    KC('G', 'major', 'Then G.', { low: true }),
+    KC('C', 'major', 'Back to C.', { low: true }),
+    KT('stop', 'Press [START/STOP] to stop.')
+  ], { hints: true }),
+  practice: [
+    KB('A worship progression with accompaniment.', [
+      KT('self', 'Choose a slow style, ACMP on, [SYNC START].'),
+      KC('C', 'major', 'C', { low: true }), KT('start', 'The style starts.'),
+      KC('G', 'major', 'G', { low: true }), KC('A', 'minor', 'Am', { low: true }), KC('F', 'major', 'F', { low: true }),
+      KT('stop', 'Stop.')
+    ], { hints: true })
+  ],
+  apply: { text: 'Use ACMP to practise chord changes in time: if you are late, the band is late. Keep it for practice and small gatherings; with a live band, turn it off.' },
+  challenge: KB('Challenge: the turnaround with accompaniment.', [
+    KT('self', 'ACMP on and [SYNC START].'),
+    KC('C', 'major', 'C', { low: true }), KT('start', 'Start.'),
+    KC('A', 'minor', 'Am', { low: true }), KC('D', 'minor', 'Dm', { low: true }), KC('G', 'major', 'G', { low: true }), KC('C', 'major', 'C', { low: true }),
+    KT('stop', 'Stop.')
+  ], { hints: false }),
+  quiz: [
+    q('What does [SYNC START] do?', ['Starts the style when you play a chord in the chord area', 'Stops the style', 'Changes the voice', 'Turns on the metronome'], 0, 'The style waits for your first left-hand chord.'),
+    q('Where do you play chords with ACMP on?', ['Anywhere', 'Left of the split point', 'Only black keys', 'Above middle C'], 1, 'In the chord area left of the split point.'),
+    q('Can you move the split point?', ['No', 'Yes, in the FUNCTION settings', 'Only with a pedal', 'Only with the app'], 1, 'Split Point is a FUNCTION setting.')
+  ]
+},
+{
+  id: 'k-style-song', cat: 'Your keyboard', title: 'Intro, fills and ending', minutes: 10, req: ['k-acmp'],
+  why: 'A song with a style has a shape: an intro, the main groove, fills at the end of sections, and a proper ending. That is what makes it sound like a band.',
+  objective: 'Play a song with an intro, main sections, fills and an ending with ritardando.',
+  theory: [
+    'Before starting, press [INTRO/ENDING/rit.]: the style begins with an intro, then the main groove.',
+    '[MAIN/AUTO FILL] switches between Main A and Main B, with a short fill in between. Use A for verses and B for choruses.',
+    'To end, press [INTRO/ENDING/rit.] during playback: the style plays an ending and stops.',
+    'Press [INTRO/ENDING/rit.] again during the ending to slow it down (ritardando), for a gentle finish.',
+    'In worship, do not let the style lead. Spontaneous moments, hymns and live bands usually need your own playing instead.'
+  ],
+  play: KB('A complete song shape.', [
+    KT('self', 'Choose a style, ACMP on, press [SYNC START] and then [INTRO/ENDING/rit.].'),
+    KC('C', 'major', 'Play C in the left hand: the intro plays.', { low: true }),
+    KT('start', 'The style starts.'),
+    KC('F', 'major', 'F', { low: true }), KC('G', 'major', 'G', { low: true }),
+    KT('self', 'Press [MAIN/AUTO FILL]: a fill, then Main B.'),
+    KC('C', 'major', 'C', { low: true }),
+    KT('stop', 'Press [INTRO/ENDING/rit.]: the ending plays and the style stops.')
+  ], { hints: true }),
+  practice: [
+    KB('A slow ending.', [
+      KT('self', 'Start a style with ACMP on and [SYNC START].'),
+      KC('G', 'major', 'G', { low: true }), KT('start', 'It starts.'),
+      KC('C', 'major', 'C', { low: true }), KC('D', 'major', 'D', { low: true }), KC('G', 'major', 'G', { low: true }),
+      KT('stop', 'Press [INTRO/ENDING/rit.], then press it again for a ritardando.')
+    ], { hints: true })
+  ],
+  apply: { text: 'Use intro, fills and ending when you sing a special number with the keyboard alone. Map it: intro, verse on A, chorus on B, ending.' },
+  challenge: KB('Challenge: verse, chorus and ending.', [
+    KT('self', 'Style, ACMP on, [SYNC START], [INTRO/ENDING/rit.].'),
+    KC('C', 'major', 'C', { low: true }), KT('start', 'Intro and start.'),
+    KC('A', 'minor', 'Am', { low: true }), KC('F', 'major', 'F', { low: true }), KC('G', 'major', 'G', { low: true }),
+    KT('self', '[MAIN/AUTO FILL] to Main B for the chorus.'),
+    KC('C', 'major', 'C', { low: true }), KC('F', 'major', 'F', { low: true }), KC('G', 'major', 'G', { low: true }), KC('C', 'major', 'C', { low: true }),
+    KT('stop', 'Ending with [INTRO/ENDING/rit.].')
+  ], { hints: false }),
+  quiz: [
+    q('Which button plays the ending?', ['[START/STOP]', '[INTRO/ENDING/rit.]', '[MAIN/AUTO FILL]', '[SYNC START]'], 1, '[INTRO/ENDING/rit.] during playback plays the ending.'),
+    q('How do you slow down the ending?', ['Press [INTRO/ENDING/rit.] again during the ending', 'Press [TEMPO/TAP]', 'Lift the pedal', 'Turn the volume down'], 0, 'Pressing it again adds a ritardando.'),
+    q('[MAIN/AUTO FILL] does what?', ['Changes voice', 'Plays a fill and switches between Main A and B', 'Starts the demo', 'Transposes'], 1, 'It plays a fill and moves between the two main sections.')
+  ]
+});
+
+KS.lessons.push(
+{
+  id: 'k-songs-lessons', cat: 'Your keyboard', title: 'Songs and the lesson modes', minutes: 10, req: ['k-style-song'],
+  why: 'The keyboard has a built-in teacher. Its lesson modes add extra practice on any of its 102 songs, hand by hand.',
+  objective: 'Play a song, use the three lesson modes for each hand, and loop a hard part with A-B Repeat.',
+  theory: [
+    'Press [SONG], choose one of the 102 songs, and press [START/STOP] to hear it.',
+    'Lesson: choose the hand with [R] (right) or [L] (left), then a mode. [1 LISTEN & LEARN]: listen and watch. [2 TIMING]: play the rhythm in time. [3 WAITING]: the song waits until you play the right note.',
+    'Timing and Waiting give a grade at the end. Press [START/STOP] to stop a lesson.',
+    'With Your Tempo (in FUNCTION) on, Waiting mode follows your speed.',
+    '[A-B REPEAT]: press it at the start of a hard passage and again at the end. The passage repeats until you press it once more. [REW], [FF] and [PAUSE] move around the song.'
+  ],
+  play: KB('Waiting mode with the right hand.', [
+    KT('self', 'Press [SONG] and choose a song. Press [R], then [3 WAITING].'),
+    KT('notes', 'Play the right-hand notes as the song waits for you. The app counts them.', { count: 12 }),
+    KT('self', 'Press [START/STOP] to finish. Read your grade.')
+  ]),
+  practice: [
+    KB('Timing mode and the left hand.', [
+      KT('self', 'Press [L], then [2 TIMING]. Play the left-hand part in rhythm.'),
+      KT('notes', 'Keep playing until the app has counted 12 notes.', { count: 12 }),
+      KT('self', 'Stop and read your grade.')
+    ]),
+    KB('A-B Repeat.', [
+      KT('self', 'Play a song. Press [A-B REPEAT] at the start of a phrase and again at its end. Listen to it loop, then press [A-B REPEAT] to cancel.')
+    ])
+  ],
+  apply: { text: 'When a song in the app is difficult, use the same idea: loop the hard bar, slowly, hands separately, then together.' },
+  challenge: KB('Challenge: both hands in Waiting mode.', [
+    KT('self', 'Choose a song. Press [R] and [L] for both hands, then [3 WAITING].'),
+    KT('notes', 'Play through: the app counts at least 20 notes.', { count: 20 }),
+    KT('self', 'Stop and note your grade in your notebook.')
+  ]),
+  quiz: [
+    q('Which lesson mode waits until you play the right note?', ['[1 LISTEN & LEARN]', '[2 TIMING]', '[3 WAITING]', '[DEMO]'], 2, 'Waiting mode waits for you.'),
+    q('How many songs are built in?', ['12', '50', '102', '385'], 2, 'There are 102 preset songs.'),
+    q('What does [A-B REPEAT] do?', ['Records you', 'Loops a passage between two points', 'Repeats the demo', 'Changes the key'], 1, 'It loops the passage between A and B.')
+  ]
+},
+{
+  id: 'k-chord-dict', cat: 'Your keyboard', title: 'The Chord Dictionary', minutes: 10, req: ['k-songs-lessons'],
+  why: 'The Chord Dictionary shows any chord on the screen and keys, so you can learn a new chord on the spot without a book.',
+  objective: 'Look up a chord in the Chord Dictionary and play it correctly.',
+  theory: [
+    'Press and hold [3 WAITING] for more than a second: the screen shows "Dict."',
+    'The keyboard is now in three zones: one to choose the root (no sound), one to choose the chord type (no sound), and one where you play the chord.',
+    'Choose a root and a type: the screen shows the chord and its notes. Play it in the playing zone; the keyboard confirms when you have it right.',
+    'Press [+] and [-] to see other positions (inversions) of the chord.',
+    'Leave by pressing [3 WAITING] again (or a mode button such as [VOICE]).'
+  ],
+  play: KB('Look up and play seventh chords.', [
+    KT('self', 'Hold [3 WAITING] until the screen shows Dict.'),
+    KC('G', 'maj7', 'Look up G major 7 (GM7) and play it. The app checks it too.'),
+    KC('D', 'm7', 'Look up D minor 7 and play it.'),
+    KC('C', '7', 'Look up C7 and play it.')
+  ], { hints: false }),
+  practice: [
+    KB('Chords you will need in gospel.', [
+      KC('F', 'maj7', 'Fmaj7'), KC('E', 'm7', 'Em7'), KC('A', '7', 'A7'), KC('B', 'dim', 'B diminished'), KC('C', 'sus4', 'Csus4')
+    ], { hints: false })
+  ],
+  apply: { text: 'When a chord chart has a chord you do not know, look it up in the dictionary, play it, then find it in the app\'s lessons to understand why it works.' },
+  challenge: KB('Challenge: look up and play a ii – V – I.', [
+    KT('self', 'Open the Chord Dictionary.'),
+    KC('D', 'm7', 'Dm7'), KC('G', '7', 'G7'), KC('C', 'maj7', 'Cmaj7'),
+    KT('self', 'Leave the dictionary.')
+  ], { hints: false }),
+  quiz: [
+    q('How do you open the Chord Dictionary?', ['Press [DEMO]', 'Hold [3 WAITING] for over a second', 'Press [FUNCTION]', 'Hold the pedal'], 1, 'Hold [3 WAITING] until it shows Dict.'),
+    q('In the dictionary, the root and type zones…', ['Make no sound', 'Play loudly', 'Change the voice', 'Start a style'], 0, 'They only choose the chord; they are silent.'),
+    q('What do [+] and [-] show in the dictionary?', ['Other inversions', 'Other songs', 'Tempo', 'Volume'], 0, 'They cycle through the positions of the chord.')
+  ]
+});
+
+KS.lessons.push(
+{
+  id: 'k-church', cat: 'Your keyboard', title: 'Connect to the church sound system', minutes: 8, req: ['k-chord-dict'],
+  why: 'In a church, your keyboard usually plays through the main speakers. A clean connection and the right levels make the whole team sound better.',
+  objective: 'Connect PHONES/OUTPUT to a mixer or amplifier safely and do a quick sound check.',
+  theory: [
+    'The PHONES/OUTPUT socket also works as a line output. When a cable is plugged in, the keyboard\'s own speakers go quiet.',
+    'Use a cable from PHONES/OUTPUT to the mixer or amplifier. A DI box between the keyboard and a long cable to the mixer gives a cleaner, quieter signal.',
+    'Safe order: turn [MASTER VOLUME] down and ask for the mixer channel to be down. Connect. Then bring the keyboard volume up to about three quarters and let the sound engineer set the level.',
+    'Turn [ULTRA-WIDE STEREO] off and use only a little reverb. Choose a Master EQ for external speakers.',
+    'Do a sound check with the sounds you will use: piano, organ, strings. Play softly and loudly so the engineer hears your range.'
+  ],
+  play: KB('A sound check (at home, with headphones, you can practise the order).', [
+    KT('self', 'Turn [MASTER VOLUME] down. Plug the cable (or headphones) into PHONES/OUTPUT.'),
+    KT('self', 'Bring [MASTER VOLUME] up slowly to about three quarters.'),
+    KT('voice', 'Piano.', { family: 'piano' }), KC('C', 'major', 'Play C.'),
+    KT('voice', 'Organ.', { family: 'organ' }), KC('F', 'major', 'Play F.')
+  ], { hints: true }),
+  practice: [
+    KB('Sound check routine.', [
+      KT('voice', 'Strings.', { family: 'strings' }), KC('G', 'major', 'Play G.'),
+      KT('voice', 'Back to piano.', { family: 'piano' }),
+      KT('notes', 'Play a scale from middle C so the engineer can set the level.', { midis: [60, 62, 64, 65, 67, 69, 71, 72] })
+    ], { hints: true })
+  ],
+  apply: { text: 'Arrive early, connect, sound check every sound you will use, and agree on hand signals with the sound engineer (more, less, OK).' },
+  challenge: KB('Challenge: full sound check in order.', [
+    KT('self', 'Volume down, connect, volume up.'),
+    KT('self', 'Ultra-Wide Stereo off, reverb low.'),
+    KT('voice', 'Piano.', { family: 'piano' }), KC('C', 'major', 'C'),
+    KT('voice', 'Organ.', { family: 'organ' }), KC('C', 'major', 'C'),
+    KT('voice', 'Strings.', { family: 'strings' }), KC('C', 'major', 'C'),
+    KT('voice', 'Piano again.', { family: 'piano' })
+  ], { hints: false }),
+  quiz: [
+    q('What happens to the keyboard speakers when a cable is in PHONES/OUTPUT?', ['They get louder', 'They go quiet', 'Nothing', 'They distort'], 1, 'The output takes over from the speakers.'),
+    q('Before plugging in, the volume should be…', ['At maximum', 'Turned down', 'At half', 'It does not matter'], 1, 'Always connect with the volume down.'),
+    q('What helps a long cable to the mixer sound clean?', ['A DI box', 'More reverb', 'Transpose', 'Batteries'], 0, 'A DI box gives a cleaner, quieter signal.')
+  ]
+},
+{
+  id: 'k-fl', cat: 'Your keyboard', title: 'Record your keyboard in FL Studio', minutes: 10, req: ['k-church'],
+  why: 'To produce your music, the keyboard becomes your input to FL Studio: you play the parts and the computer records every note.',
+  objective: 'Connect the keyboard to FL Studio, record a part, and fix note volumes afterwards.',
+  theory: [
+    'Close Gospel Music Academy first: usually only one program can use the keyboard at a time.',
+    'In FL Studio open Options > MIDI settings. Find your keyboard in the input list (it may be called Digital Keyboard or a Yamaha name) and enable it.',
+    'Choose an instrument in FL Studio, press record, and play. The notes appear in the piano roll.',
+    'Your keys send every note at the same loudness. In the piano roll, lower the velocity of some notes (for example inner chord notes and passing notes) so the part breathes.',
+    'To record the keyboard\'s own sounds (not FL Studio\'s), connect PHONES/OUTPUT to the line input of an audio interface and record audio.'
+  ],
+  play: KB('Prepare a part to record (practise it here first).', [
+    KT('self', 'Set the metronome to 80. You will record four bars.'),
+    KC('C', 'major', 'C'), KC('A', 'minor', 'Am'), KC('F', 'major', 'F'), KC('G', 'major', 'G')
+  ], { hints: true }),
+  practice: [
+    KB('Record in FL Studio.', [
+      KT('self', 'Close this app. Open FL Studio, enable your keyboard in Options > MIDI settings, choose a piano instrument.'),
+      KT('self', 'Record the four chords with FL Studio\'s metronome on. Look at the notes in the piano roll.'),
+      KT('self', 'Lower the velocity of the middle note of each chord a little and listen again.')
+    ])
+  ],
+  apply: { text: 'Record your ideas the same day you have them: a voice memo for the melody, and the chords played into FL Studio.' },
+  challenge: KB('Challenge: a clean four-bar take (practised with the app).', [
+    KT('tempo', 'With the metronome at 80, play one key on each click to lock in.', { bpm: 80, tol: 4 }),
+    KC('C', 'major', 'C'), KC('A', 'minor', 'Am'), KC('F', 'major', 'F'), KC('G', 'major', 'G'),
+    KT('self', 'Now record it in FL Studio and save the project.')
+  ], { hints: false }),
+  quiz: [
+    q('Before opening FL Studio, you should…', ['Unplug the pedal', 'Close Gospel Music Academy', 'Switch to batteries', 'Set Transpose to +2'], 1, 'Usually only one program can use the keyboard at a time.'),
+    q('Where do you enable the keyboard in FL Studio?', ['Options > MIDI settings', 'File > Export', 'The mixer', 'The playlist'], 0, 'Options > MIDI settings.'),
+    q('Why adjust velocities in the piano roll?', ['The YPT-240 sends every note at the same loudness', 'To change the key', 'To add reverb', 'To fix the tempo'], 0, 'The keys are not touch-sensitive, so you shape the loudness afterwards.')
+  ]
+},
+{
+  id: 'k-mastery', cat: 'Your keyboard', title: 'Keyboard mastery check', minutes: 12, req: ['k-fl'],
+  why: 'Mastering your instrument means doing everything quickly and calmly, the way you will need to in a service.',
+  objective: 'Run through sounds, tempo, accompaniment and pedal in one go, checked by the app.',
+  theory: [
+    'This lesson brings together everything in Level 0: sounds, effects, tempo, transpose, the pedal, styles and the built-in teacher.',
+    'Aim for calm speed: know which button you need before you reach for it.',
+    'If anything goes wrong, [PORTABLE GRAND] brings you back to a safe piano sound.',
+    'Keep your notebook card with your favourite voice numbers, tempos and settings on the music rest.'
+  ],
+  play: KB('Warm up: sounds and tempo.', [
+    KT('voice', 'Organ.', { family: 'organ' }), KC('C', 'major', 'C'),
+    KT('voice', '[PORTABLE GRAND].', { family: 'piano' }),
+    KT('self', 'Set the metronome to 80 and start it.'),
+    KT('tempo', 'Play one key on each click.', { bpm: 80, tol: 4 })
+  ], { hints: true }),
+  practice: [
+    KB('Accompaniment and pedal.', [
+      KT('self', 'Style, ACMP on, [SYNC START].'),
+      KC('C', 'major', 'C', { low: true }), KT('start', 'Start.'),
+      KC('F', 'major', 'F', { low: true }), KC('G', 'major', 'G', { low: true }), KC('C', 'major', 'C', { low: true }),
+      KT('stop', 'Ending.'),
+      KT('legato', 'Piano with pedal: four clean changes.', { n: 4 })
+    ], { hints: true })
+  ],
+  apply: { text: 'You know your instrument. From here, every lesson in the course can be played on your own keys, with the app listening.' },
+  challenge: KB('Mastery check: everything, in order, without hints.', [
+    KT('voice', 'Choose strings.', { family: 'strings' }),
+    KC('F', 'major', 'Hold F.'),
+    KT('voice', '[PORTABLE GRAND].', { family: 'piano' }),
+    KT('self', 'Set the tempo to 72 and start the metronome.'),
+    KT('tempo', 'Play one key on each click.', { bpm: 72, tol: 4 }),
+    KT('self', 'Stop the metronome. Choose a style, ACMP on, [SYNC START].'),
+    KC('G', 'major', 'G', { low: true }), KT('start', 'Start.'),
+    KC('C', 'major', 'C', { low: true }), KC('D', 'major', 'D', { low: true }), KC('G', 'major', 'G', { low: true }),
+    KT('stop', 'Ending.'),
+    KT('legato', 'Four clean pedal changes on any chords.', { n: 4 })
+  ], { hints: false }),
+  quiz: [
+    q('Your safe button when something sounds wrong is…', ['[DEMO]', '[PORTABLE GRAND]', '[FUNCTION]', '[SONG]'], 1, '[PORTABLE GRAND] brings back the piano.'),
+    q('Before a service you check Transpose is…', ['+2', '00', '-12', 'It does not matter'], 1, 'Transpose should be back at 00.'),
+    q('To start a style exactly on your first chord you use…', ['[SYNC START]', '[DEMO]', '[A-B REPEAT]', '[PAUSE]'], 0, 'Sync Start waits for your first left-hand chord.')
+  ]
+});
+
+KS.modules = [
+  { id: 'kb-meet', level: '0', title: 'Meet your keyboard', blurb: 'Power, sockets, the buttons and the screen, and connecting to the app.', lessons: ['k-setup', 'k-panel', 'k-connect'] },
+  { id: 'kb-sound', level: '0', title: 'Sounds and effects', blurb: 'Choosing voices, your worship sounds, and reverb, chorus and EQ.', lessons: ['k-voices', 'k-worship-sounds', 'k-effects'] },
+  { id: 'kb-time', level: '0', title: 'Time, key and pedal', blurb: 'Metronome and tempo, transpose and tuning, and the sustain pedal.', lessons: ['k-metronome', 'k-transpose', 'k-pedal'] },
+  { id: 'kb-styles', level: '0', title: 'Styles and accompaniment', blurb: 'Rhythms, left-hand chords, intros, fills and endings.', lessons: ['k-styles', 'k-acmp', 'k-style-song'] },
+  { id: 'kb-teacher', level: '0', title: 'The built-in teacher', blurb: 'Songs, the three lesson modes, A-B Repeat and the Chord Dictionary.', lessons: ['k-songs-lessons', 'k-chord-dict'] },
+  { id: 'kb-out', level: '0', title: 'Church, studio and mastery', blurb: 'The church sound system, recording in FL Studio, and the mastery check.', lessons: ['k-church', 'k-fl', 'k-mastery'] }
+];
+LESSONS.push.apply(LESSONS, KS.lessons);
+MODULES.push(...KS.modules);
+LEVELS.push({ id: '0', name: 'Level 0', title: 'Your keyboard: Yamaha YPT-240', goal: 'Know every function of your keyboard and use it with confidence: sounds, effects, tempo, transpose, pedal, styles, the built-in teacher, church sound and recording.' });
+
 /* order the course: the instrument path first, then worship, advanced, songwriting and production, and mastery last */
-const LEVEL_ORDER = ['1', '2', 'G', '3', 'H', 'W', 'A', 'S', 'P', 'M'];
+const LEVEL_ORDER = ['0', '1', '2', 'G', '3', 'H', 'W', 'A', 'S', 'P', 'M'];
 LEVELS.sort((a, b) => LEVEL_ORDER.indexOf(a.id) - LEVEL_ORDER.indexOf(b.id));
 MODULES.sort((a, b) => LEVEL_ORDER.indexOf(a.level) - LEVEL_ORDER.indexOf(b.level));
 
@@ -4609,6 +5305,19 @@ function validate(Engine) {
           ns.forEach(t => { const m = Engine.midiOf(t); if (m === null || m === undefined || !Engine.parseToken(t)) errs.push(tag + ' bad read token ' + t); else if (m < r[0] || m > r[1]) errs.push(tag + ' read note ' + t + ' outside range ' + r.join('-')); });
         });
         if (!ex.pool || !ex.pool.length || !ex.count) errs.push(tag + ' read needs pool and count');
+      } else if (ex.type === 'kbd') {
+        const KINDS = ['self', 'note', 'notes', 'chord', 'voice', 'pedal', 'legato', 'start', 'stop', 'tempo'];
+        const FAMS = ['piano', 'electric piano', 'organ', 'strings', 'choir', 'pad', 'brass', 'flute', 'guitar', 'bass', 'reed', 'bells'];
+        if (!ex.tasks || !ex.tasks.length) errs.push(tag + ' kbd needs tasks');
+        (ex.tasks || []).forEach((t, i) => {
+          if (!KINDS.includes(t.k)) errs.push(tag + ' kbd task ' + i + ' unknown kind ' + t.k);
+          if (!t.text) errs.push(tag + ' kbd task ' + i + ' needs text');
+          if (t.k === 'note' && !(t.midi >= 36 && t.midi <= 96)) errs.push(tag + ' kbd task ' + i + ' note must be on 61 keys (36-96)');
+          if (t.k === 'notes' && !(t.count > 0 || (t.midis && t.midis.length && t.midis.every(m => m >= 36 && m <= 96)))) errs.push(tag + ' kbd task ' + i + ' notes needs count or midis on 61 keys');
+          if (t.k === 'chord' && (!Engine.QUALITIES[t.quality] || Engine.pcOfName(t.root) === null)) errs.push(tag + ' kbd task ' + i + ' bad chord');
+          if (t.k === 'voice' && t.family && ![].concat(t.family).every(f => FAMS.includes(f))) errs.push(tag + ' kbd task ' + i + ' unknown family ' + t.family);
+          if (t.k === 'tempo' && !(t.bpm >= 11 && t.bpm <= 280)) errs.push(tag + ' kbd task ' + i + ' tempo out of range');
+        });
       } else errs.push(tag + ' unknown type ' + ex.type);
     });
     l.quiz.forEach((qq, n) => {

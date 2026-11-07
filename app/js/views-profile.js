@@ -68,7 +68,8 @@ function viewProfile() {
       '<section class="card"><h3>Sound</h3><label class="switch"><input type="checkbox" data-bind="psound"' + (S.prefs.sound ? ' checked' : '') + '><span>Sound on</span></label>' + soundPicker() +
       '<label class="switch"><input type="checkbox" data-bind="pslow"' + (S.prefs.speed === 'slow' ? ' checked' : '') + '><span>Play examples slowly by default</span></label></section>' +
       soundCard() +
-      '<section class="card"><h3>MIDI keyboard</h3><p id="miditext">' + esc(Midi.text()) + '</p>' + (Midi.supported ? (Midi.status === 'ready' ? '<button class="btn ghost" data-act="mididisc">Disconnect</button>' : '<button class="btn primary" data-act="midiconnect">Connect a MIDI keyboard</button>') : '') + '<p class="tiny">A USB or Bluetooth keyboard plays every exercise, chord checker and test in the app, with the same feedback as the on-screen keys.</p></section>';
+      '<section class="card"><h3>MIDI keyboard</h3><p id="miditext">' + esc(Midi.text()) + '</p>' + (Midi.supported ? (Midi.status === 'ready' ? '<button class="btn ghost" data-act="mididisc">Disconnect</button>' : '<button class="btn primary" data-act="midiconnect">Connect a MIDI keyboard</button>') : '') + '<p class="tiny">A USB or Bluetooth keyboard plays every exercise, chord checker and test in the app, with the same feedback as the on-screen keys.</p></section>' +
+      myKeyboardCard();
   } else if (tab === 'data') {
     const resetOk = (ui.resetText || '').trim().toUpperCase() === 'RESET';
     body = backupCard() +
@@ -97,4 +98,17 @@ function viewProfile() {
       return () => { alive = false; };
     }
   };
+}
+
+/* ---- My keyboard: what the learner plays on, so instructions and sound fit it ---- */
+function myKeyboardCard() {
+  const k = S.prefs.keyboard || '', snd = S.prefs.midiSound || 'both';
+  return '<section class="card"><h3>My keyboard</h3>' +
+    '<label class="field"><span>Which keyboard do you play?</span><select data-bind="kbdmodel"><option value="">Not set</option>' +
+    '<option value="ypt240"' + (k === 'ypt240' ? ' selected' : '') + '>Yamaha YPT-240 (61 keys, keys not touch-sensitive)</option>' +
+    '<option value="touch"' + (k === 'touch' ? ' selected' : '') + '>Another keyboard with touch-sensitive keys</option></select></label>' +
+    '<label class="field"><span>When the keyboard is connected, the sound comes from</span><select data-bind="midisound">' +
+    '<option value="both"' + (snd !== 'keyboard' ? ' selected' : '') + '>The keyboard and the app</option>' +
+    '<option value="keyboard"' + (snd === 'keyboard' ? ' selected' : '') + '>Only the keyboard (the app stays quiet)</option></select></label>' +
+    '<p class="tiny">' + (k === 'ypt240' ? 'Practice routines that ask for soft and loud playing will tell you how to practise them on the YPT-240, where every note has the same loudness. Level 0 teaches this keyboard.' : 'Choose your keyboard so practice instructions fit it.') + ' "Only the keyboard" stops the double sound when you play.</p></section>';
 }

@@ -1,8 +1,31 @@
 'use strict';
 /* ---------------------------------------------------------------- version, what's new, credits
    APP_VERSION must match "version" in package.json (a unit test checks this). */
-const APP_VERSION = '2.3.0';
+const APP_VERSION = '2.6.1';
 const CHANGES = [
+  { v: '2.6.1', title: 'MIDI keyboards connect again', items: [
+    'Fixed: Connect a MIDI keyboard said "The keyboard could not be opened" on new installs, because the app did not allow the new name Chrome now uses for keyboard access. USB keyboards such as the Yamaha YPT-240 connect again.'
+  ] },
+  { v: '2.6.0', title: 'The Vocal Studio', items: [
+    'A new Vocal Studio (Voice, in the top bar) trains your singing with the microphone. It hears the note you sing to within a few cents and shows it live as a line against the target notes.',
+    'Find your range once; every exercise is then pitched for your voice. Ten graded exercises: matching notes, five-note scale, arpeggio, major and minor scales, intervals, a long steady note, echo phrases, gospel runs in time, and harmony a third below.',
+    'A daily 10-minute warm-up, eight short lessons (breathing, singing in tune, vowels and tone, chest and head voice, runs, harmony, leading worship, caring for your voice), and My voice: your range, voice type, how often you are in tune, whether you lean sharp or flat, and your best scores.',
+    'The best key for your voice for each of your Song Lab songs, with the Transpose number for your keyboard.',
+    'Fixed: practice routines kept listening to your keyboard only until the screen was redrawn, and a redraw stopped the routine metronome.'
+  ] },
+  { v: '2.5.0', title: 'Your keyboard, everywhere', items: [
+    'At your piano routines now listen to your keyboard: each block counts your notes and playing minutes, names the chords you play, and measures your timing against the metronome. When you are steady, it offers to raise the tempo by 5 BPM.',
+    'Blocks that name a tempo (for example "metronome 60") set the metronome for you. Your playing minutes and timing are saved with each session.',
+    'Settings > My keyboard: choose the Yamaha YPT-240 and routines that ask for soft and loud playing explain how to practise them on your keyboard. You can also choose to hear only the keyboard, without the app\'s sound.',
+    'Song Lab: play chords in from your keyboard. Each chord you play is added to the section as a chord of the key. Melodies can be recorded from the keyboard too.',
+    'Song Lab: play the song through your keyboard, using its own speakers and sounds (piano, electric piano, organ, strings, choir or pad for the chords), with bass, melody and drums on their own channels.'
+  ] },
+  { v: '2.4.0', title: 'Level 0: Your keyboard', items: [
+    'A new Level 0 teaches your Yamaha YPT-240 itself, in 17 lessons: setting up, the buttons, connecting, choosing voices and your worship sounds, effects, metronome and tempo, transpose, the sustain pedal, styles and left-hand accompaniment, intros and endings, the built-in songs and lesson modes, the Chord Dictionary, the church sound system and recording in FL Studio.',
+    'Connect the keyboard by USB and the app listens as you work: it hears your keys and chords, which kind of sound you chose (piano, organ, strings, choir), the sustain pedal and clean pedal changes, when a style starts and stops, and your tempo.',
+    'Steps the keyboard cannot report, like an effect setting, you tick yourself. Every Level 0 lesson also has a 20-minute At your piano routine.',
+    'Level 0 is first in the course but does not block the other levels.'
+  ] },
   { v: '2.3.0', title: 'At your piano', items: [
     'Every piano lesson now has a 20-minute routine for your own piano or keyboard: a warm-up, four focused blocks written for that lesson, and a close where you play it as music.',
     'A timer walks you through the blocks with a chime between them, with a metronome beside it. The time counts as practice even while you are away from the computer.',

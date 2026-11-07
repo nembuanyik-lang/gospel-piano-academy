@@ -25,6 +25,7 @@ function viewHome() {
   const undoCard = ui.undoImport ? '<section class="card callout"><div class="split"><div><h3>Progress replaced from a backup</h3><p class="muted">If this was a mistake, put back what was on this device before the import.</p></div><button class="btn ghost" type="button" data-act="undoimport">Undo import</button></div></section>' : '';
   const dueHome = reviewDue().length;
   if (inst !== 'guitar' && techReady()) items.push({ key: 'tech', title: 'Technique: ' + fmt(keyOfDay()) + ' major, the key of the day', sub: 'Scale, arpeggio and ii – V – I', act: 'pview', attrs: 'data-view="technique"' });
+  items.push({ key: 'voice', title: 'Vocal warm-up', sub: 'About 10 minutes in the Vocal Studio: breath, scales and pitch, checked with the microphone', act: 'vxgo', attrs: 'data-warm="1" data-tab="today"' });
   if (inst !== 'guitar' && nl && pianoRoutine(nl)) items.push({ key: 'piano', title: 'At your piano: ' + C.byId[nl].title, sub: 'A ' + routineMinutes(C.byId[nl]) + '-minute routine on your own piano or keyboard', act: 'openroutine', attrs: 'data-id="' + esc(nl) + '"' });
   if (dueHome || t.items.review) items.splice(2, 0, { key: 'review', title: dueHome ? 'Review: ' + dueHome + ' skill' + (dueHome === 1 ? '' : 's') + ' due' : 'Review done', sub: 'Quick questions on lessons you finished', act: 'pview', attrs: 'data-view="review"' });
   const html = '<div class="screen home">' +

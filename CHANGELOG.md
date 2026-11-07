@@ -1,5 +1,57 @@
 # Changelog
 
+## 2.6.1 — MIDI keyboards connect again
+
+- Fixed: recent Chromium requests all Web MIDI access as the `midiSysex` permission, which the permission handlers
+  refused, so `requestMIDIAccess` failed with "The keyboard could not be opened". Both `midi` and `midiSysex` are
+  now allowed for the app's own page (the page still never requests or sends SysEx). The error now names the cause.
+
+## 2.6.0 — The Vocal Studio
+
+- Pitch tracking (`app/js/pitch.js`): YIN with parabolic interpolation, 65–1250 Hz, loudness gate, clarity > 0.8,
+  5-frame median against octave slips. Unit test: within 10 cents from C2 to C6, including a weak fundamental; noise rejected.
+- Vocal Studio (`app/js/voice.js`, route `voice`, nav "Voice"): range finder and voice-type guide; live note, cents needle
+  and pitch trace; ten exercises (match, five-note, arpeggio, major scale, minor five-note, intervals, sustain, echo,
+  gospel runs timed with a speed ladder, harmony a diatonic third below), all pitched from the singer's range,
+  call-and-response so the reference does not leak into the microphone; octave-free grading (score 100 within 10 cents,
+  "in tune" within 25); summary with sharp/flat tendency. Daily warm-up (Home > Today's practice), eight lessons,
+  My voice (range, in-tune rate, tendency, longest note, best scores, recent sessions) and best key per Song Lab song.
+- `S.voice` saved and cleaned by the sanitiser. Browser tests sing to the app through a fake microphone
+  (`tests/fixtures/make-voice.py`): in tune scores ≥ 85, 40 cents flat is measured as about −40 and called flat.
+- Fixed: routine listening now uses `Input.always` (survives redraws); a redraw no longer stops the routine metronome.
+
+## 2.5.0 — Your keyboard, everywhere
+
+- Routines listen (`app/js/routine-ui.js`): per block, notes, playing seconds, chords heard (`E.identifyChord`), and
+  timing against the routine metronome (nearest beat or half beat, within 70 ms or 22 % of the grid). Rolling window of
+  32 notes; at 90 % in time over 24+ notes a "Try +5 BPM" button appears. A tempo named in a block ("metronome 60",
+  "80 BPM", "at 72") sets the metronome when the block starts. Sessions store `lastPlayed`, `played` and `lastTiming`.
+- My keyboard (`Settings`): `prefs.keyboard` (`ypt240` / `touch`) and `prefs.midiSound` (`both` / `keyboard`).
+  With the YPT-240, routine blocks that mention dynamics get a note on practising them without touch-sensitive keys;
+  with "Only the keyboard", MIDI notes no longer sound in the app.
+- Song Lab chord entry from the keyboard: a played chord (3+ notes, added on release) becomes the matching diatonic
+  chord number; chords outside the key are explained and not added.
+- Song Lab MIDI out (`MidiOut` in `app/js/input.js`): chords on channel 2 (choice of GM sound), bass on 3 (GM 33),
+  melody on 4, drums on 10, scheduled 300 ms ahead with timestamps; Stop sends note-offs, sustain off and all notes off.
+  Bass events are tagged `part: 'bass'` in the arrangement. Melody recording keeps the computer sound for exact timing.
+- Settings and backups clean the new preferences and routine fields.
+
+## 2.4.0 — Level 0: Your keyboard (Yamaha YPT-240)
+
+- New Level 0 (6 modules, 17 lessons, `BATCH K` in `app/js/curriculum.js`) built from the YPT-240 / PSR-E243 owner's
+  manual and MIDI reference: setup, panel, USB connection and Local Control, voices and worship sounds, effects,
+  metronome and tempo, transpose and tuning, sustain pedal, styles, ACMP and Sync Start, intro/fill/ending,
+  songs and lesson modes, Chord Dictionary, church sound system, recording into FL Studio, and a mastery check.
+- New exercise type `kbd` (`app/js/lesson.js`): a list of keyboard tasks checked from MIDI — notes, chords
+  (including left-hand chords below the split point), voice changes by General MIDI family, sustain pedal presses,
+  legato pedalling (pedal changed after the new chord), style start/stop (FA/FC), and tempo from MIDI clock or keys
+  played on the clicks. Self-ticked steps are reported as not heard. If the app hears nothing for 15 seconds a
+  "tick it myself" button appears; without a keyboard connected, steps offer Connect.
+- `Midi` (`app/js/input.js`) now reports program change with bank, sustain pedal changes, start/stop and clock tempo
+  via `Midi.on()`; `gmFamily()` names the sound family.
+- At your piano routines for all Level 0 lessons (`app/js/routines-5.js`); the content validator checks `kbd` tasks.
+- Level 0 is first in the course order but does not gate Level 1.
+
 ## 2.3.0 — At your piano
 
 - A 20-minute routine for the learner's own piano in every one of the 151 piano lessons (`app/js/routines-1.js` to

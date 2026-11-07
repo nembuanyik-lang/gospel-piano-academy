@@ -96,7 +96,7 @@ function arrangeSection(P, type, o) {
     const v = sc.voiced[i], t0 = i * sc.chordBeats, dur = sc.chordBeats;
     changes.push(t0);
     compEvents(v, t0, dur, P.style || 'whole', meter, vel).forEach(e => { events.push(e); e.notes.forEach(m => parts.chords.push({ t: e.t, d: e.d, m, v: Math.round(e.vel * 110) })); });
-    bassEvents(ch, v, sc.voiced[i + 1] || sc.voiced[0], t0, dur, P.bassStyle || 'root', meter, vel).forEach(e => { events.push(e); e.notes.forEach(m => parts.bass.push({ t: e.t, d: e.d, m, v: Math.round(Math.min(1, e.vel) * 110) })); });
+    bassEvents(ch, v, sc.voiced[i + 1] || sc.voiced[0], t0, dur, P.bassStyle || 'root', meter, vel).forEach(e => { e.part = 'bass'; events.push(e); e.notes.forEach(m => parts.bass.push({ t: e.t, d: e.d, m, v: Math.round(Math.min(1, e.vel) * 110) })); });
   });
   drumEvents(P, sc.beats, energy).forEach(e => { events.push(e); parts.drums.push({ t: e.t, d: 0.25, m: { k: 36, s: 38, h: 42, o: 46, r: 37 }[e.drum], v: Math.round(40 + e.vel * 80) }); });
   const mel = o.melody !== false && P.melodies[type];

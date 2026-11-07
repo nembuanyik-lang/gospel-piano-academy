@@ -273,18 +273,20 @@ function start() {
       } catch { return new Response('Not found', { status: 404 }); }
     });
 
-    // Allow MIDI keyboards and the microphone (guitar tuner) for our own page only. No camera, no MIDI SysEx.
+    // Allow MIDI keyboards and the microphone for our own page only. No camera.
+    // Recent Chromium asks for every Web MIDI request as 'midiSysex' (even with sysex: false), so both names are
+    // allowed; the page itself never asks for SysEx and never sends it.
     const ours = (url) => typeof url === 'string' && url.startsWith(ORIGIN + '/');
     session.defaultSession.setPermissionRequestHandler((wc, permission, cb, details) => {
       const url = (details && details.requestingUrl) || (wc && wc.getURL()) || '';
       if (!ours(url)) return cb(false);
-      if (permission === 'midi') return cb(true);
+      if (permission === 'midi' || permission === 'midiSysex') return cb(true);
       if (permission === 'media') { const t = (details && details.mediaTypes) || []; return cb(t.length > 0 && t.every(x => x === 'audio')); }
       return cb(false);
     });
     session.defaultSession.setPermissionCheckHandler((_wc, permission, origin, details) => {
       if (!ours(String(origin || '') + '/') && !ours(details && details.requestingUrl)) return false;
-      if (permission === 'midi') return true;
+      if (permission === 'midi' || permission === 'midiSysex') return true;
       if (permission === 'media') return !details || !details.mediaType || details.mediaType === 'audio';
       return false;
     });

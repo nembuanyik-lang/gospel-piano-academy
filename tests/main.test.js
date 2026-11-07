@@ -94,3 +94,9 @@ test('app version in the page matches package.json', () => {
 });
 
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+
+test('MIDI keyboards are allowed under both permission names (recent Chromium asks for midiSysex)', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+  assert.match(src, /setPermissionRequestHandler[\s\S]*permission === 'midi' \|\| permission === 'midiSysex'\) return cb\(true\)/);
+  assert.match(src, /setPermissionCheckHandler[\s\S]*permission === 'midi' \|\| permission === 'midiSysex'\) return true/);
+});

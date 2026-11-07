@@ -357,7 +357,7 @@ test('every chord, performance and note exercise fits on the drawn keyboard, and
     const g = window.__gpa, out = [];
     const host = document.createElement('div'); document.body.appendChild(host);
     for (const L of window.Curriculum.LESSONS) {
-      const exs = [].concat(L.practice || [], L.challenge ? [L.challenge] : []).map(x => x.ex || x).filter(x => x && ['chord', 'perf', 'seq'].includes(x.type));
+      const exs = [].concat(L.practice || [], L.challenge ? [L.challenge] : []).map(x => x.ex || x).filter(x => x && ['chord', 'perf', 'seq', 'kbd'].includes(x.type));
       for (const ex of exs) {
         const api = g.mountExercise(host, ex, { hints: true });
         const keys = new Set([...host.querySelectorAll('.ex-piano [data-m]')].map(k => +k.dataset.m));
@@ -393,7 +393,7 @@ test('every piano lesson has a 20-minute routine at the piano, and finishing it 
     return { missing: ids.filter(id => !pianoRoutine(id)), wrong: ids.filter(id => routineMinutes(window.__gpa.C.byId[id]) !== 20) };
   });
   assert.deepEqual(info.missing, []); assert.deepEqual(info.wrong, []);
-  const first = await page.evaluate(() => window.Curriculum.LESSONS[0].id);
+  const first = await page.evaluate(() => nextLesson());
   await page.waitForSelector('[data-act=openroutine]');
   await page.click('[data-act=openroutine]');
   await page.waitForSelector('.routine #rtgo');
@@ -412,5 +412,157 @@ test('every piano lesson has a 20-minute routine at the piano, and finishing it 
   await page.click('#rtlog');
   const kept = await page.evaluate(id => { const st = JSON.parse(JSON.stringify(window.__gpa.S())); st.routines['<bad>'] = { n: 5 }; st.routines[id].n = 'x'; return window.Sanitize.cleanState(st, {}).routines; }, first);
   assert.equal(kept['<bad>'], undefined); assert.equal(kept[first].n, 0);
+  assert.deepEqual(errors, []);
+});
+
+test('Level 0 (Yamaha YPT-240): the app hears voice changes, left-hand chords, style start and stop, the pedal and tempo', async () => {
+  const { page, errors } = await open();
+  await onboard(page);
+  const r = await page.evaluate(async () => {
+    const g = window.__gpa, C = g.C, out = {};
+    out.first = C.order[0]; out.next = nextLesson(); out.level1Open = isUnlocked('keyboard-layout');
+    out.levels = C.LEVELS.map(l => l.id).slice(0, 2);
+    Midi.status = 'ready';
+    const send = (...b) => Midi.handle({ data: b });
+    const host = document.createElement('div'); document.body.appendChild(host);
+    const wait = ms => new Promise(res => setTimeout(res, ms));
+    const run = (ex) => new Promise(res => { const api = g.mountExercise(host, ex, { hints: true, onDone: r2 => res({ api, r: r2 }) }); out.api = api; });
+    const clickSelf = () => { const b = host.querySelector('[data-kbd=self]'); if (b) b.click(); };
+    const chord = async (...ms) => { ms.forEach(m => send(0x90, m, 100)); await wait(30); ms.forEach(m => send(0x80, m, 0)); await wait(30); };
+
+    // 1. voice families: a wrong family is explained, the right ones pass
+    let p = run(C.byId['k-voices'].challenge);
+    send(0xB0, 0, 0); send(0xB0, 32, 0); send(0xC0, 24); await wait(20);
+    out.wrongFamilyMsg = host.querySelector('.ex-fb').textContent;
+    send(0xC0, 19); send(0xC0, 48); send(0xC0, 52); send(0xC0, 0);
+    let res = await p; out.voices = res.r; res.api.destroy();
+
+    // 2. ACMP: self step, left-hand chord starts the style (start arrives with the chord), changes, stop
+    p = run(C.byId['k-acmp'].play);
+    clickSelf(); await wait(10);
+    send(0x90, 36, 100); send(0x90, 40, 100); send(0x90, 43, 100); send(0xFA); await wait(40); [36, 40, 43].forEach(m => send(0x80, m, 0));
+    await wait(40);
+    out.acmpAfterStart = host.querySelectorAll('.kbd-tasks li.ok').length;
+    await chord(41, 45, 48); await chord(43, 47, 50); await chord(36, 40, 43);
+    send(0xFC);
+    res = await p; out.acmp = res.r; res.api.destroy();
+
+    // 3. legato pedalling: chord, then pedal up and down shortly after
+    p = run(C.byId['k-pedal'].challenge);
+    for (let i = 0; i < 6; i++) { send(0x90, 60 + i, 100); await wait(60); send(0xB0, 64, 0); await wait(80); send(0xB0, 64, 127); await wait(60); send(0x80, 60 + i, 0); }
+    res = await p; out.legato = res.r; res.api.destroy();
+    p = run({ type: 'kbd', prompt: 'l', tasks: [{ k: 'legato', text: 'two changes', n: 2 }] });
+    send(0xB0, 64, 0); await wait(20);                                                                         // start with the pedal up
+    send(0x90, 60, 100); await wait(50); send(0xB0, 64, 127); await wait(50); send(0x80, 60, 0);            // first catch
+    send(0xB0, 64, 0); await wait(50); send(0x90, 65, 100); await wait(50); send(0xB0, 64, 127); await wait(30); // lifted too early
+    out.earlyLiftMsg = host.querySelector('.ex-fb').textContent;
+    send(0x90, 67, 100); await wait(50); send(0xB0, 64, 0); await wait(60); send(0xB0, 64, 127);              // clean
+    res = await p; out.legato2 = res.r; res.api.destroy();
+
+    // 4. tempo from the keyboard's clock (24 ticks per beat at 72 BPM)
+    const ex4 = { type: 'kbd', prompt: 't', tasks: [{ k: 'tempo', text: 'Play on each click', bpm: 72, tol: 2 }] };
+    p = run(ex4);
+    const per = 60000 / 72 / 24, now = performance.now(); Midi.clocks = []; for (let i = 0; i < 40; i++) Midi.clocks.push(now - (39 - i) * per);
+    res = await p; out.clockTempo = res.r; out.clockBpm = Midi.clockBpm(); res.api.destroy();
+
+    // 5. with no keyboard connected, a listening step can be ticked by hand and is reported as not checked
+    Midi.status = 'idle';
+    p = run({ type: 'kbd', prompt: 'x', tasks: [{ k: 'voice', text: 'Change voice' }] });
+    await wait(10); out.connectBtn = !!host.querySelector('[data-act=midiconnect]'); clickSelf();
+    res = await p; out.offline = res.r; out.offlineMsg = host.querySelector('.ex-fb').textContent; res.api.destroy();
+    host.remove();
+    return out;
+  });
+  assert.equal(r.first, 'k-setup'); assert.equal(r.next, 'k-setup'); assert.equal(r.level1Open, true);
+  assert.deepEqual(r.levels, ['0', '1']);
+  assert.match(r.wrongFamilyMsg, /guitar sound/);
+  assert.equal(r.voices.success, true); assert.equal(r.voices.accuracy, 100);
+  assert.ok(r.acmpAfterStart >= 3, 'the chord and the style start that came with it are both ticked');
+  assert.equal(r.acmp.success, true);
+  assert.equal(r.legato.success, true);
+  assert.match(r.earlyLiftMsg, /came up before the new chord/); assert.equal(r.legato2.success, true);
+  assert.equal(r.clockBpm, 72); assert.equal(r.clockTempo.success, true);
+  assert.equal(r.connectBtn, true); assert.equal(r.offline.accuracy, 0); assert.match(r.offlineMsg, /ticked by you/);
+  assert.deepEqual(errors, []);
+});
+
+test('2.5.0 with a keyboard: routines listen, My keyboard adapts them, chords are played into the Song Lab, and the song plays through the keyboard', async () => {
+  const { page, errors } = await open();
+  await onboard(page);
+  const r = await page.evaluate(async () => {
+    const g = window.__gpa, S = g.S(), out = {}, wait = ms => new Promise(res => setTimeout(res, ms));
+    const sent = [];
+    const fakeOut = { name: 'Digital Keyboard', send: (d, at) => sent.push({ d: Array.from(d), at: at || 0 }) };
+    Midi.access = { outputs: new Map([['o1', fakeOut]]), inputs: new Map() }; Midi.names = ['Digital Keyboard']; Midi.status = 'ready';
+    const send = (...b) => Midi.handle({ data: b });
+
+    // 2. My keyboard: the YPT-240 note appears in routines that ask for soft and loud playing; keyboard-only sound
+    S.prefs.keyboard = 'ypt240';
+    out.adapted = routineBlocks(g.C.byId['first-melody']).some(b => /every key plays at the same loudness/.test(b[2]));
+    out.notAdaptedAloud = !routineBlocks(g.C.byId['musical-alphabet']).some(b => /same loudness/.test(b[2]));
+    S.prefs.midiSound = 'keyboard';
+    let calls = 0; const orig = Snd.noteOn; Snd.noteOn = (...a) => { calls++; return orig.apply(Snd, a); };
+    send(0x90, 60, 100); send(0x80, 60, 0); out.keyboardOnlyCalls = calls;
+    S.prefs.midiSound = 'both'; send(0x90, 62, 100); send(0x80, 62, 0); out.bothCalls = calls; Snd.noteOn = orig;
+
+    // 1. the routine listens: tempo from the block, timing against the metronome, the +5 ladder, the session log
+    g.ACTIONS.openroutine({ dataset: { id: 'keyboard-layout' } }); await wait(50);
+    document.querySelector('#rtgo').click(); await wait(20);
+    out.warmBpm = +document.querySelector('#rtbpm').value;
+    document.querySelector('#rtmet').click(); await wait(20);
+    const m = RT.met;
+    for (let k = 0; k < 30; k++) rtHear({ midi: 60 + (k % 5), t: performance.now() + k * 10, ctx: m.t0 + k * m.spb + 0.01 });
+    for (let k = 0; k < 2; k++) rtHear({ midi: 60, t: performance.now(), ctx: m.t0 + (40 + k) * m.spb + m.spb * 0.25 });
+    rtHeld.clear();                         // (real keys are released between notes)
+    [60, 64, 67].forEach(n => rtHear({ midi: n, t: performance.now(), ctx: m.t0 + 50 * m.spb }));
+    render(); render();                         // redraws must not stop the routine listening
+    const n0 = rtCur().notes; send(0x90, 72, 100); send(0x80, 72, 0); out.heardAfterRedraw = rtCur().notes === n0 + 1;
+    await wait(400);
+    out.listen = document.querySelector('#rtlisten').textContent;
+    out.upVisible = !document.querySelector('#rtup').hidden;
+    document.querySelector('#rtup').click(); await wait(20);
+    out.bpmAfterUp = +document.querySelector('#rtbpm').value;
+    for (let i = 0; i < 6; i++) { document.querySelector('#rtnext').click(); await wait(20); }
+    const log = S.routines['keyboard-layout'];
+    out.log = log ? { n: log.n, lastTiming: log.lastTiming, hasPlayed: log.lastPlayed != null } : null;
+
+    // 3. chords played in from the keyboard go into the Song Lab section as chord numbers
+    g.go('song'); g.ACTIONS.slnew(); await wait(50);
+    const P = S.songs[0]; P.key = 'C'; g.go('song', { pid: P.id }); await wait(50);
+    out.playThrough = !!document.querySelector('[data-bind=pkbdout]');
+    const before = P.sections[pst().sec].degs.length;
+    document.querySelector('#pkbin').click(); await wait(50);
+    const chord = async (...ms) => { ms.forEach(n => send(0x90, n, 100)); await wait(20); ms.forEach(n => send(0x80, n, 0)); await wait(60); };
+    await chord(65, 69, 72);                 // F major: chord 4 in C
+    await chord(57, 60, 64);                 // A minor: chord 6
+    await chord(63, 67, 70);                 // E flat major: not in C
+    out.notInKey = document.querySelector('#pkbinfo').textContent;
+    out.added = S.songs[0].sections[pst().sec].degs.slice(before);
+
+    // 4. the song plays through the keyboard: program change, chords on channel 2, bass on 3, then silence on stop
+    S.prefs.kbdOut = { on: true, prog: 19 };
+    g.go('song', { pid: P.id }); await wait(50);
+    sent.length = 0;
+    document.querySelector('#songplay').click(); await wait(700);
+    out.prog = sent.some(x => x.d[0] === 0xC1 && x.d[1] === 19);
+    out.chordNotes = sent.filter(x => x.d[0] === 0x91 && x.d[2] > 0).length;
+    out.bassNotes = sent.filter(x => x.d[0] === 0x92 && x.d[2] > 0).length;
+    out.timestamped = sent.filter(x => x.d[0] === 0x91).every(x => x.at > 0);
+    document.querySelector('#songplay').click(); await wait(50);
+    out.silenced = [0xB1, 0xB2, 0xB3, 0xB9].every(st => sent.some(x => x.d[0] === st && x.d[1] === 123));
+    sent.length = 0; out.test = MidiOut.test(48); out.testNotes = sent.filter(x => (x.d[0] & 0xF0) === 0x90).length;
+    return out;
+  });
+  assert.equal(r.adapted, true); assert.equal(r.notAdaptedAloud, true);
+  assert.equal(r.keyboardOnlyCalls, 0); assert.equal(r.bothCalls, 1);
+  assert.equal(r.warmBpm, 60);
+  assert.match(r.listen, /Listening · \d+ notes/); assert.match(r.listen, /last chord C/); assert.match(r.listen, /% in time at 60 BPM/);
+  assert.equal(r.heardAfterRedraw, true);
+  assert.equal(r.upVisible, true); assert.equal(r.bpmAfterUp, 65);
+  assert.ok(r.log && r.log.n === 1 && r.log.hasPlayed && r.log.lastTiming >= 80, JSON.stringify(r.log));
+  assert.equal(r.playThrough, true);
+  assert.deepEqual(r.added, [4, 6]); assert.match(r.notInKey, /not one of the seven chords/);
+  assert.equal(r.prog, true); assert.ok(r.chordNotes > 0 && r.bassNotes > 0, JSON.stringify(r)); assert.equal(r.timestamped, true);
+  assert.equal(r.silenced, true); assert.equal(r.test, true); assert.equal(r.testNotes, 4);
   assert.deepEqual(errors, []);
 });
