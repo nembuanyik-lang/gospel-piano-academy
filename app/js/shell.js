@@ -5,7 +5,7 @@ const NAV_ACTIVE = { lesson: 'course', testout: 'course', guitar: 'course' };
 /* Navigation. go() moves to a screen (stops sound, scrolls to the top, adds a history entry so the
    mouse back button and Alt+Left work). render() redraws the current screen in place: sound keeps
    playing, the scroll position stays and keyboard focus returns to the same control. */
-const VIEWS = () => ({ home: viewHome, course: viewCourse, lesson: viewLesson, lab: viewLab, practice: viewPractice, song: viewSong, voice: viewVoice, guitar: viewGuitar, progress: viewProgress, profile: viewProfile, testout: viewTestout, onboarding: viewOnboarding });
+const VIEWS = () => ({ home: viewHome, course: viewCourse, lesson: viewLesson, lab: viewLab, practice: viewPractice, song: viewSong, learn: viewLearn, voice: viewVoice, guitar: viewGuitar, progress: viewProgress, profile: viewProfile, testout: viewTestout, onboarding: viewOnboarding });
 let lastError = null;
 function go(name, params, opt) {
   const next = { name, params: params || {} };

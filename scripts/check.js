@@ -8,7 +8,7 @@ const root = path.join(__dirname, '..');
 const release = process.argv.includes('--release');
 const problems = [], warnings = [];
 
-const files = ['main.js', 'preload.js', ...fs.readdirSync(path.join(root, 'scripts')).map(f => 'scripts/' + f),
+const files = ['main.js', 'preload.js', 'lanremote.js', ...fs.readdirSync(path.join(root, 'scripts')).map(f => 'scripts/' + f),
   ...fs.readdirSync(path.join(root, 'app', 'js')).map(f => 'app/js/' + f)].filter(f => f.endsWith('.js'));
 for (const f of files) {
   try { execFileSync(process.execPath, ['--check', path.join(root, f)], { stdio: 'pipe' }); }

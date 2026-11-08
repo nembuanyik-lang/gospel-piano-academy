@@ -1,3 +1,4 @@
+const T = require('./tabs').auto;
 // Song Lab 2.9 in a real browser: any chord, per-chord length and pushes, suggestions, the song form (repeats, key
 // change with its lead-in, tags, stops), words under the melody, choir parts, lead sheet and number chart exports,
 // and singing a melody in through a (fake) microphone.
@@ -22,7 +23,7 @@ test.after(async () => { await browser.close(); srv.close(); });
 
 async function open() {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true, permissions: ['microphone'] });
-  const page = await ctx.newPage();
+  const page = T(await ctx.newPage());
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });

@@ -529,3 +529,154 @@ test('licks: every lick is in key, in range, and transposes to all twelve keys; 
   assert.ok(G.matchScore([67, 65, 64, 62, 60].map(m => m - 12), want, { octaveFree: true }).score === 1, 'a man singing an octave lower still matches');
   assert.ok(G.matchScore([67, 64, 62, 60], want).score < 0.85, 'a missed note shows');
 });
+
+/* ---------------- editing recordings, Undo and Redo ---------------- */
+test('editing a take: a part sung again replaces that part only, silenced parts go quiet, edges are smooth, the original is never changed', () => {
+  const V = require('../app/js/vocalfx.js'), sr = 8000, take = new Float32Array(sr * 4).fill(0.5), keep = take.slice();
+  const clip = new Float32Array(Math.round(sr * 1.04)).fill(-0.25);   // covers 1.48 s .. 2.52 s (the part 1.5..2.5 plus 20 ms each side)
+  const out = V.applyEdits(take, sr, { patches: [{ a: 1.5, b: 2.5, t0: 1.48, fade: 0.02, pcm: clip }] });
+  assert.deepEqual(take, keep, 'the take itself is untouched');
+  assert.equal(out.length, take.length);
+  assert.equal(out[Math.round(sr * 1.0)], 0.5, 'before the part: as sung');
+  assert.equal(out[Math.round(sr * 3.0)], 0.5, 'after the part: as sung');
+  assert.ok(Math.abs(out[Math.round(sr * 2.0)] + 0.25) < 1e-6, 'inside the part: the new recording');
+  // no jump bigger than a smooth fade across the edge (20 ms = 160 samples for a 0.75 step)
+  let maxStep = 0; for (let i = 1; i < out.length; i++) maxStep = Math.max(maxStep, Math.abs(out[i] - out[i - 1]));
+  assert.ok(maxStep < 0.02, 'smooth edges: biggest step ' + maxStep);
+  // silence
+  const sil = V.applyEdits(take, sr, { mutes: [{ a: 1, b: 2 }] });
+  assert.equal(sil[Math.round(sr * 1.5)], 0); assert.equal(sil[Math.round(sr * 3)], 0.5);
+  let ms = 0; for (let i = 1; i < sil.length; i++) ms = Math.max(ms, Math.abs(sil[i] - sil[i - 1]));
+  assert.ok(ms < 0.02, 'silence fades in and out without a click: ' + ms);
+  // a part that runs past the end lengthens the take; nothing to do returns the same array
+  const longer = V.applyEdits(new Float32Array(sr), sr, { patches: [{ a: 0.9, b: 1.5, t0: 0.88, fade: 0.02, pcm: new Float32Array(sr).fill(0.3) }] });
+  assert.ok(longer.length >= Math.round(sr * 1.5));
+  assert.equal(V.applyEdits(take, sr, {}), take);
+});
+test('waveform pictures and level matching for a part sung again', () => {
+  const V = require('../app/js/vocalfx.js'), sr = 1000, x = new Float32Array(sr * 2); x[500] = 0.8; x[1500] = -0.6;
+  const p = V.peaks(x, sr, 100);
+  assert.equal(p.length, 2 * 200, '100 pairs for every second');
+  assert.ok(Math.abs(p[50 * 2 + 1] - 0.8) < 1e-6 && Math.abs(p[150 * 2] + 0.6) < 1e-6 && p[0] === 0 && p[1] === 0);
+  const base = new Float32Array(sr * 4).map((_, i) => 0.2 * Math.sin(i / 7)), clip = new Float32Array(sr).map((_, i) => 0.05 * Math.sin(i / 7));
+  const g = V.matchGain(base, clip, sr, 1, 2); assert.ok(g > 3.5 && g <= 4, 'a quiet clip is brought up to the take around it: ' + g);
+  const loud = new Float32Array(sr).map((_, i) => 0.1 * Math.sin(i / 7));
+  assert.ok(Math.abs(V.matchGain(new Float32Array(sr * 4), loud, sr, 1, 2) * V.peakOf(loud) - 0.7) < 0.01, 'with nothing to match, the peak goes to 0.7');
+});
+test('Undo and Redo: pictures of the song, a slider drag is one step, every button is its own, new changes drop Redo, recording marks left out, restored in place', () => {
+  const H = require('../app/js/history.js'), P = { id: 'p1', title: 'A', bpm: 70, tracks: [], recAt: 1 };
+  H.begin(P); assert.equal(H.canUndo(), false);
+  P.title = 'B'; assert.equal(H.note(P, 10000), true);
+  H.setLive(true); P.bpm = 71; H.note(P, 20000); P.bpm = 72; H.note(P, 20100); P.bpm = 73; H.note(P, 20200); H.setLive(false);   // a slider drag
+  assert.equal(H.steps().back, 2, 'the drag is one step');
+  P.bpm = 80; H.note(P, 20250); P.bpm = 81; H.note(P, 20260);   // two quick button presses
+  assert.equal(H.steps().back, 4, 'each button press is its own step');
+  P.title = 'C'; H.note(P, 30000); assert.equal(H.steps().back, 5);
+  P.recAt = 99; assert.equal(H.note(P, 40000), false, 'a recording mark alone is not a change');
+  const same = P; assert.equal(H.undo(P), true); assert.equal(P, same, 'the same object is changed');
+  assert.deepEqual([P.title, P.bpm, P.recAt], ['B', 81, 99], 'back one step; the mark stays');
+  assert.equal(H.undo(P), true); assert.equal(P.bpm, 80);
+  assert.equal(H.undo(P), true); assert.equal(P.bpm, 73);
+  assert.equal(H.undo(P), true); assert.equal(P.bpm, 70, 'the whole drag goes back at once');
+  assert.equal(H.undo(P), true); assert.deepEqual([P.title, P.bpm], ['A', 70]); assert.equal(H.undo(P), false);
+  assert.equal(H.redo(P), true); assert.equal(P.title, 'B');
+  P.title = 'D'; H.note(P, 50000); assert.equal(H.canRedo(), false, 'a new change drops the redo steps');
+  assert.equal(H.undo(P), true); assert.equal(P.title, 'B');
+  H.end(); assert.equal(H.id(), null); assert.equal(H.undo(P), false);
+});
+test('saved songs keep their fixes and the new microphone settings; bad ones are dropped', () => {
+  const song = Sanitize.cleanSong({ id: 'pabc', title: 'T', guide: { takes: [{ k: 'pabc', at: 1, dur: 5, n: 1 }], main: 0,
+    mutes: [{ a: 1, b: 2 }, { a: 5, b: 3 }, { a: -1, b: 2 }, 'x'], patches: [{ k: 'pabc:2', n: 2, a: 3, b: 4, t0: 2.98, fade: 0.02 }, { k: 'evil/../x', n: 3, a: 3, b: 4, t0: 1 }, { k: 'pabc:3', n: 3, a: 9, b: 8, t0: 1 }] },
+    tracks: [{ id: 'h1', name: 'Harmony', takes: [{ k: 'pabc:th1:1', at: 1, dur: 3, n: 1 }], patches: [{ k: 'pabc:th1:2', n: 2, a: 1, b: 2, t0: 1 }, { k: 'pabc:2', n: 2, a: 1, b: 2, t0: 1 }] }], recAt: 5, pkgAt: 'no' }, { songs: [] }, new Set());
+  assert.ok(song, 'the song is kept');
+  assert.deepEqual(song.guide.mutes, [{ a: 1, b: 2 }]);
+  assert.deepEqual(song.guide.patches.map(p => p.k), ['pabc:2']);
+  assert.deepEqual(song.tracks[0].patches.map(p => p.k), ['pabc:th1:2'], 'a track keeps only its own recordings');
+  assert.equal(song.recAt, 5); assert.equal(song.pkgAt, undefined);
+});
+
+test('phone remote server: needs the code, serves state, accepts only the three commands, locks out guessers, stops cleanly', async () => {
+  const { createRemote, phonePage } = require('../lanremote');
+  const got = [];
+  const r = createRemote({ onCommand: c => got.push(c) });
+  const info = await r.start(0);
+  assert.ok(info.ok && info.on && /^\d{6}$/.test(info.pin));
+  const base = 'http://127.0.0.1:' + info.port, k = '?k=' + info.pin;
+  assert.equal((await fetch(base + '/')).status, 403, 'no code, no page');
+  assert.equal((await fetch(base + '/api/state?k=000000x')).status, 403);
+  const page = await fetch(base + '/' + k); assert.equal(page.status, 200);
+  const html = await page.text(); assert.ok(html.includes('Song remote') && !/https?:\/\/(?!localhost)/.test(html.replace(/http:\/\/www\.w3\.org/g, '')), 'the page is built in and loads nothing from the internet');
+  assert.equal(html, phonePage());
+  r.setMeta({ title: 'He Did It', status: 'idle', chart: [{ label: 'Chorus', chords: ['D', 'A'], lines: ['He did it'] }] });
+  r.setLive({ sec: 'Chorus', now: 'D', next: 'Next: A', lines: ['He did it'], li: 0 });
+  const st = await (await fetch(base + '/api/state' + k)).json();
+  assert.equal(st.meta.title, 'He Did It'); assert.equal(st.live.now, 'D');
+  const post = (cmd, extra) => fetch(base + '/api/cmd' + k, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(Object.assign({ cmd }, extra)) });
+  for (const c of ['play', 'record', 'stop']) assert.equal((await post(c)).status, 200);
+  assert.deepEqual(got, ['play', 'record', 'stop']);
+  assert.equal((await post('delete everything')).status, 400); assert.equal((await post('__proto__')).status, 400);
+  assert.deepEqual(got, ['play', 'record', 'stop'], 'unknown commands do nothing');
+  assert.equal((await fetch(base + '/api/cmd' + k, { method: 'POST', body: 'x'.repeat(5000) }).catch(() => ({ status: 0 }))).status === 200, false, 'a huge request is refused');
+  assert.equal((await fetch(base + '/nothing' + k)).status, 404);
+  for (let i = 0; i < 8; i++) await fetch(base + '/?k=bad' + i);
+  assert.equal((await fetch(base + '/' + k)).status, 429, 'after many wrong codes everything waits a minute');
+  assert.equal((await r.stop()).on, false);
+  await assert.rejects(fetch(base + '/' + k), 'switched off means nobody can connect');
+  const again = await r.start(0); assert.notEqual(again.pin, undefined); await r.stop();
+});
+
+test('chord finder: finds a chord progression in a recording, with noise and a slightly out-of-tune tape; 7ths only when asked', () => {
+  const CF = require(js('chordfinder.js')), sr = 11025, note = m => 440 * Math.pow(2, (m - 69) / 12);
+  const chord = (ms, dur, det) => { const n = Math.floor(dur * sr), o = new Float32Array(n); ms.forEach(m => { const f = note(m) * det; for (let h = 1; h <= 5; h++) for (let i = 0; i < n; i++) o[i] += Math.sin(2 * Math.PI * f * h * i / sr) / h / ms.length; }); return o; };
+  const prog = [[50, 54, 57], [55, 59, 62], [57, 61, 64, 67], [50, 54, 57], [47, 50, 54, 57], [52, 55, 59], [57, 61, 64], [50, 54, 57]];
+  let seed = 7; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const make = det => { const parts = prog.map(p => chord(p, 2.5, det)), x = new Float32Array(parts.reduce((a, b) => a + b.length, 0)); let o = 0; parts.forEach(p => { x.set(p, o); o += p.length; }); for (let i = 0; i < x.length; i++) x[i] += (rnd() - 0.5) * 0.4; return x; };
+  const names = (r, flats) => r.segs.map(s => CF.chordName(s.r, s.q, flats)).join(' ');
+  for (const det of [1, Math.pow(2, 0.3 / 12), Math.pow(2, -0.25 / 12)]) {
+    const x = make(det);
+    assert.equal(names(CF.analyse(x, sr, { simple: true }), false), 'D G A D Em A D', 'plain chords, tuning ' + det);
+    const r = CF.analyse(x, sr, {}); assert.equal(names(r, false), 'D G A7 D Bm7 Em A D', 'with 7ths, tuning ' + det);
+    assert.equal(CF.keyName(r.key, false), 'D'); assert.ok(r.segs.every(s => s.dur > 1.5), 'steady chords, no flicker');
+  }
+  const r = CF.analyse(make(1), sr, { simple: true }); assert.ok(Math.abs(r.segs[1].t - 2.5) < 0.4 && Math.abs(r.segs[2].t - 5) < 0.4, 'chord changes land near the right time: ' + r.segs.map(s => s.t));
+  assert.deepEqual(CF.detect({ frames: [], hop: 0.1 }, {}), []);
+  assert.equal(CF.chordName(10, 'm7', true, 2), 'Cm7'); assert.equal(CF.chordName(10, '', false), 'A#');
+  assert.equal(CF.flatsFor({ r: 5, minor: false }), true); assert.equal(CF.flatsFor({ r: 2, minor: false }), false); assert.equal(CF.flatsFor({ r: 2, minor: true }), true);
+});
+
+test('sanitize: kept chords from recordings are cleaned', () => {
+  const st = Sanitize.cleanState({ v: 1, learn: [{ fid: 'a.mp3|10', name: 'a.mp3', size: 10, seconds: 20, key: { r: 14, minor: 1 }, segs: [[0, 2, 2, 'm7'], [2, 2, 3, 'bad'], 'x', [1, 2, 3]], at: 5 }, { fid: 'a.mp3|10', name: 'dup' }, { name: 'no id' }, 7] }, { keys: ['C'], styles: [], beats: [], earTypes: [] });
+  assert.equal(st.learn.length, 1); const l = st.learn[0];
+  assert.deepEqual(l.key, { r: 11, minor: true }); assert.deepEqual(l.segs, [[0, 2, 2, 'm7'], [2, 2, 3, '']]);
+  assert.equal(Sanitize.cleanState({ v: 1, learn: 'x' }, { keys: ['C'], styles: [], beats: [], earTypes: [] }).learn, undefined);
+});
+
+test('makossa drums: a running hi-hat (softer between the beats), kick on 1 and 3 with pushes, snare on 2 and 4 with ghosts', () => {
+  const ev = Engine.beatEvents({ beat: 'makossa' }, 1), at = d => ev.filter(e => e.drum === d);
+  assert.equal(at('h').length, 16, 'the hi-hat runs in sixteenths');
+  const hv = at('h').map(e => e.vel); assert.ok(hv[0] > hv[2] && hv[2] > hv[1], 'strong on the beat, then the eighths, then the weak sixteenths: ' + hv);
+  assert.deepEqual(at('k').map(e => e.t * 4), [0, 6, 8, 11]);
+  const sn = at('s'); assert.ok(sn.some(e => e.t === 1 && e.vel > 0.7) && sn.some(e => e.t === 3 && e.vel > 0.7), 'snare on 2 and 4');
+  assert.ok(sn.filter(e => e.vel < 0.3).length === 2, 'two soft ghost notes');
+  assert.ok(Engine.BEATS.makossalight && Engine.beatEvents({ beat: 'makossalight' }, 2).length > 10);
+});
+
+test('drums: Cameroonian grooves exist, a human feel is repeatable and stays in bounds, the first kick stays on the beat', () => {
+  ['bikutsi', 'assiko', 'ndombolo'].forEach(id => { assert.ok(Engine.BEATS[id], id); const ev = Engine.beatEvents({ beat: id }, 2); assert.ok(ev.length > 20, id + ' has hits'); assert.ok(ev.every(e => e.t >= 0 && e.t < 8), id + ' stays inside the bars'); });
+  const base = Engine.beatEvents({ beat: 'makossa' }, 4);
+  assert.deepEqual(Engine.humanizeDrums(base, 0, 100), base, 'exact means untouched');
+  const a = Engine.humanizeDrums(base, 1, 100), b = Engine.humanizeDrums(base, 1, 100); assert.deepEqual(a, b, 'the same every time');
+  const loose = Engine.humanizeDrums(base, 2, 100);
+  const maxDt = (x) => Math.max(...x.map((e, i) => Math.abs(e.t - base[i].t))) * 600;   // beats → milliseconds at 100 BPM
+  assert.ok(maxDt(a) > 0.5 && maxDt(a) <= 12, 'light: within about 6 ms (+ lay-back): ' + maxDt(a)); assert.ok(maxDt(loose) > maxDt(a) && maxDt(loose) <= 20, 'loose is looser: ' + maxDt(loose));
+  assert.ok(loose.every(e => e.vel >= 0.05 && e.vel <= 1 && e.t >= 0));
+  base.forEach((e, i) => { if (e.drum === 'k' && e.t % 4 === 0) assert.equal(a[i].t, e.t, 'the kick on beat 1 is exact'); });
+  assert.ok(new Set(loose.filter(e => e.drum === 'h').map(e => e.vel.toFixed(3))).size > 4, 'the hi-hat loudness varies');
+});
+
+test('sanitize: saved progressions, human feel, drum fill kinds and the new endings', () => {
+  const ctx = { keys: ['C'], styles: [], beats: ['none', 'rock', 'makossa'], earTypes: [] };
+  const st = Sanitize.cleanState({ v: 1, progs: [{ fid: 'abc123', name: ' Sunday ', chords: [{ r: 0, q: 'maj9', b: null, beats: 4, push: false }, { r: 20, q: 'evil', b: 99, beats: 400, push: 1 }] }, { fid: '!!', name: 'bad', chords: [{ r: 0, q: 'major' }] }, { fid: 'abc123', name: 'dup', chords: [{ r: 1, q: 'minor' }] }, { fid: 'zzz999', name: 'empty', chords: [] }] }, ctx);
+  assert.equal(st.progs.length, 1); const p = st.progs[0]; assert.equal(p.name, 'Sunday');
+  assert.deepEqual(p.chords[1], { r: 11, q: 'major', b: 11, beats: 32, push: false }); assert.equal(p.chords[0].q, 'maj9');
+});

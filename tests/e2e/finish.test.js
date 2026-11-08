@@ -1,3 +1,4 @@
+const T = require('./tabs').auto;
 // Finishing a song in the Song Lab: multitrack recording with overdubs, the mixer, mastering to a loudness target,
 // MP3 (with a stand-in encoder: the real LAME encoder is added by the release build), stems in a ZIP, drum fills,
 // swells and endings, and the song details in the files and on the lyrics sheet.
@@ -22,7 +23,7 @@ test.after(async () => { await browser.close(); srv.close(); });
 async function open(init) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true, permissions: ['microphone'] });
   if (init) await ctx.addInitScript(init);
-  const page = await ctx.newPage(), errors = [];
+  const page = T(await ctx.newPage()), errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
   await page.goto('http://localhost:' + PORT + '/');

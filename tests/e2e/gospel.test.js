@@ -1,3 +1,4 @@
+const T = require('./tabs').auto;
 // Gospel ear training, the licks library (played back on keys and sung through a fake microphone), and the song
 // package (everything, with recordings and loops) saved and opened again, also after another program re-zipped it.
 const test = require('node:test');
@@ -20,7 +21,7 @@ test.before(async () => {
 test.after(async () => { await browser.close(); srv.close(); });
 async function open() {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true, permissions: ['microphone'] });
-  const page = await ctx.newPage(), errors = [];
+  const page = T(await ctx.newPage()), errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
   await page.goto('http://localhost:' + PORT + '/');

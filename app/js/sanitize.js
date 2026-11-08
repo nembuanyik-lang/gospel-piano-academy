@@ -17,7 +17,7 @@ const MAX_DEPTH = 8, MAX_ARRAY = 5000, DEFAULT_TEXT = 1000;
 const SECTIONS = ['Intro', 'Verse', 'Pre-chorus', 'Chorus', 'Bridge', 'Outro'];
 const DAILY = [5, 10, 15, 20, 30];
 const TOP_KEYS = ['v', 'updated', 'profile', 'lessons', 'cats', 'xp', 'practice', 'ear', 'ach', 'songs', 'prefs', 'testouts',
-  'scores', 'today', 'sprint', 'recommend', 'events', 'review', 'songbook', 'sight', 'guitar', 'perf', 'signoffs', 'byear', 'routines', 'voice', 'gear', 'licks'];
+  'scores', 'today', 'sprint', 'recommend', 'events', 'review', 'songbook', 'sight', 'guitar', 'perf', 'signoffs', 'byear', 'routines', 'voice', 'gear', 'licks', 'learn', 'progs'];
 
 const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
 const num = (v, d, lo, hi) => { const n = typeof v === 'number' ? v : NaN; if (!Number.isFinite(n)) return d; return Math.min(hi === undefined ? n : hi, Math.max(lo === undefined ? n : lo, n)); };
@@ -76,12 +76,16 @@ function cleanSong(p, ctx, taken) {
     bpm: Math.round(num(p.bpm, 80, 40, 240)),
     beat: pick(p.beat, ctx.beats ? ctx.beats.concat(['meter']) : null, 'none'),
     swing: num(p.swing, 0, 0, 100),
+    human: Math.round(num(p.human, 0, 0, 2)),
+    beatWas: ctx.beats && ctx.beats.indexOf(p.beatWas) >= 0 && p.beatWas !== 'none' ? p.beatWas : undefined,
     grid,
     melody,
     lyrics: { chorus: String(lyr.chorus || '').slice(0, 5000), verse: String(lyr.verse || '').slice(0, 5000), bridge: String(lyr.bridge || '').slice(0, 5000) },
     structure: Array.isArray(p.structure) ? p.structure.filter(s => SECTIONS.indexOf(s) >= 0).slice(0, 30) : [],
     steps: { prog: steps.prog === true, melody: steps.melody === true, chorus: steps.chorus === true, song: steps.song === true },
     done: p.done === true,
+    recAt: Number.isFinite(p.recAt) && p.recAt > 0 ? p.recAt : undefined,
+    pkgAt: Number.isFinite(p.pkgAt) && p.pkgAt > 0 ? p.pkgAt : undefined,
     created: num(p.created, Date.now(), 0),
     v: p.v === 2 || p.v === 3 ? p.v : undefined,
     ts: [3, 4, 6].indexOf(p.ts) >= 0 ? p.ts : 4,
@@ -94,7 +98,7 @@ function cleanSong(p, ctx, taken) {
     tracks: cleanTracks(p.tracks, id),
     mixer: cleanMixer(p.mixer),
     master: isObj(p.master) && ['stream', 'gentle', 'loud', 'off'].indexOf(p.master.target) >= 0 ? { target: p.master.target } : undefined,
-    ending: ['none', 'hold', 'ritard', 'fade'].indexOf(p.ending) >= 0 ? p.ending : undefined,
+    ending: ['none', 'hold', 'ritard', 'ritardhold', 'bigfinish', 'fade'].indexOf(p.ending) >= 0 ? p.ending : undefined,
     info: cleanInfo(p.info),
     mix: isObj(p.mix) ? ['chords', 'bass', 'drums', 'melody'].reduce((o, k) => { if (p.mix[k] === false) o[k] = false; return o; }, {}) : undefined,
     words: cleanWords(p.words),
@@ -124,7 +128,7 @@ function cleanForm(list) {
   if (!Array.isArray(list)) return undefined;
   const int = (v, lo, hi, d) => Math.round(num(v, d, lo, hi));
   return list.filter(i => isObj(i) && SECTIONS.indexOf(i.s) >= 0).slice(0, 30).map(i => ({ s: i.s, up: int(i.up, -6, 11, 0), x: int(i.x, 1, 8, 1), tag: int(i.tag, 0, 8, 0),
-    stop: i.stop === true, vamp: i.vamp === true, en: ['soft', 'full'].indexOf(i.en) >= 0 ? i.en : '', lead: i.lead !== false, fill: i.fill === true, swell: i.swell === true }));
+    stop: i.stop === true, vamp: i.vamp === true, en: ['soft', 'full'].indexOf(i.en) >= 0 ? i.en : '', lead: i.lead !== false, fill: i.fill === true, fk: ['snare', 'toms', 'half', 'crash'].indexOf(i.fk) >= 0 ? i.fk : '', swell: i.swell === true }));
 }
 const FX_PRESETS = ['off', 'natural', 'worship', 'ballad', 'choir', 'speech'], NR_SET = ['preset', 'off', 'light', 'medium', 'strong'];
 function cleanGuide(g, id) {
@@ -134,6 +138,9 @@ function cleanGuide(g, id) {
   if (out.takes) out.main = Math.round(num(g.main, out.takes.length - 1, 0, Math.max(0, out.takes.length - 1)));
   if (isObj(g.comp)) { out.comp = {}; Object.keys(g.comp).slice(0, 200).forEach(k => { if (/^[0-9]{1,3}$/.test(k) && Number.isInteger(g.comp[k]) && g.comp[k] >= 0 && g.comp[k] < 6) out.comp[k] = g.comp[k]; }); }
   if (isObj(g.fx) && FX_PRESETS.indexOf(g.fx.preset) >= 0) out.fx = { preset: g.fx.preset, nr: NR_SET.indexOf(g.fx.nr) >= 0 ? g.fx.nr : 'preset', reverb: g.fx.reverb !== false };
+  const range = r => isObj(r) && Number.isFinite(r.a) && Number.isFinite(r.b) && r.a >= 0 && r.b > r.a && r.b <= 7200;
+  if (Array.isArray(g.mutes)) out.mutes = g.mutes.filter(range).slice(0, 60).map(r => ({ a: r.a, b: r.b }));
+  if (Array.isArray(g.patches)) out.patches = g.patches.filter(r => range(r) && typeof r.k === 'string' && keyRe.test(r.k) && Number.isFinite(r.t0)).slice(0, 24).map(r => ({ k: r.k, n: Math.round(num(r.n, 1, 1, 9999)), a: r.a, b: r.b, t0: Math.max(0, r.t0), fade: num(r.fade, 0.02, 0.001, 0.1) }));
   out.pan = num(g.pan, 0, -1, 1); out.mute = g.mute === true; out.solo = g.solo === true;
   return out;
 }
@@ -142,7 +149,7 @@ function cleanTracks(list, id) {
   const seen = new Set();
   return list.filter(t => isObj(t) && typeof t.id === 'string' && /^[a-z0-9]{1,12}$/.test(t.id) && !seen.has(t.id) && seen.add(t.id)).slice(0, 8).map(t => {
     const o = cleanGuide(t, id); o.id = t.id; o.name = typeof t.name === 'string' && t.name.trim() ? t.name.slice(0, 40) : 'Track'; o.kind = t.kind === 'instrument' ? 'instrument' : 'vocal';
-    o.takes = (o.takes || []).filter(k => k.k.indexOf(id + ':t' + t.id + ':') === 0); return o;
+    o.takes = (o.takes || []).filter(k => k.k.indexOf(id + ':t' + t.id + ':') === 0); if (o.patches) o.patches = o.patches.filter(k => k.k.indexOf(id + ':t' + t.id + ':') === 0); return o;
   });
 }
 function cleanMixer(m) {
@@ -194,7 +201,7 @@ function cleanState(raw, ctx) {
 
   const objKeys = ['profile', 'lessons', 'cats', 'practice', 'ear', 'ach', 'prefs', 'testouts', 'today', 'sprint', 'recommend', 'events', 'review', 'songbook', 'sight', 'guitar', 'perf', 'signoffs', 'byear', 'routines', 'voice', 'gear', 'licks'];
   objKeys.forEach(k => { if (out[k] !== undefined && !isObj(out[k])) delete out[k]; });
-  ['songs', 'scores'].forEach(k => { if (out[k] !== undefined && !Array.isArray(out[k])) delete out[k]; });
+  ['songs', 'scores', 'learn', 'progs'].forEach(k => { if (out[k] !== undefined && !Array.isArray(out[k])) delete out[k]; });
 
   if (out.v !== undefined) out.v = num(out.v, 1, 0);
   if (out.updated !== undefined) out.updated = num(out.updated, 0, 0);
@@ -223,6 +230,9 @@ function cleanState(raw, ctx) {
     if (p.room !== undefined && !['off', 'room', 'church', 'hall'].includes(p.room)) delete p.room;
     if (p.memSaver !== undefined && !['auto', 'on', 'off'].includes(p.memSaver)) delete p.memSaver;
     if (p.micLatencyMs !== undefined) p.micLatencyMs = Math.round(num(p.micLatencyMs, 0, -100, 600));
+    if (p.micChannel !== undefined && ['auto', '1', '2', 'mix'].indexOf(p.micChannel) < 0) delete p.micChannel;
+    if (p.outId !== undefined && (typeof p.outId !== 'string' || p.outId.length > 200)) delete p.outId;
+    if (p.micLatencyById !== undefined) { if (!isObj(p.micLatencyById)) delete p.micLatencyById; else { const m = {}; Object.keys(p.micLatencyById).slice(0, 40).forEach(k => { if (k.length <= 420) m[k] = Math.round(num(p.micLatencyById[k], 0, -100, 600)); }); p.micLatencyById = m; } }
     if (p.micCheck !== undefined) { const c = p.micCheck; p.micCheck = isObj(c) ? { at: num(c.at, 0, 0), noiseDb: Math.round(num(c.noiseDb, -60, -140, 0)), peakDb: num(c.peakDb, -6, -140, 0), level: ['good', 'too loud', 'too quiet', 'a little quiet', 'a little hot'].indexOf(c.level) >= 0 ? c.level : 'good', ok: c.ok === true } : undefined; if (!p.micCheck) delete p.micCheck; }
     if (p.midiSound !== undefined && !['both', 'keyboard'].includes(p.midiSound)) delete p.midiSound;
     if (p.kbdOut !== undefined) { if (!isObj(p.kbdOut)) delete p.kbdOut; else p.kbdOut = { on: p.kbdOut.on === true, prog: [0, 4, 19, 48, 52, 88].includes(p.kbdOut.prog) ? p.kbdOut.prog : 0 }; }
@@ -283,6 +293,22 @@ function cleanState(raw, ctx) {
   if (out.sprint) Object.keys(out.sprint).forEach(f => { if (typeof out.sprint[f] !== 'number') delete out.sprint[f]; });
   if (out.scores) {
     out.scores = out.scores.filter(isObj).slice(-60).map(s => ({ kind: s.kind === 'testout' ? 'testout' : 'lesson', id: typeof s.id === 'string' ? s.id : '', title: typeof s.title === 'string' ? s.title.slice(0, 120) : '', pct: Math.round(num(s.pct, 0, 0, 100)), at: num(s.at, 0, 0) }));
+  }
+  if (out.progs) {
+    const QS = ['major', 'minor', 'sus2', 'sus4', 'dim', 'aug', 'maj7', '7', 'm7', 'm7b5', 'dim7', '7sus4', 'mmaj7', '6', 'm6', '69', 'add9', 'madd9', 'maj9', '9', 'm9', '9sus4', 'm11', 'maj7#11', '13', 'maj13', 'm13', '13sus4', '7b9', '7#9', '7#5', '7b5', '7#9b13', '7b9b13'];
+    const seenP = new Set();
+    out.progs = out.progs.filter(isObj).filter(x => typeof x.fid === 'string' && /^[a-z0-9]{3,20}$/.test(x.fid) && !seenP.has(x.fid) && seenP.add(x.fid)).slice(0, 40).map(x => ({
+      fid: x.fid, name: typeof x.name === 'string' && x.name.trim() ? x.name.trim().slice(0, 60) : 'My progression', at: Math.round(num(x.at, 0, 0, 1e14)),
+      chords: (Array.isArray(x.chords) ? x.chords : []).filter(isObj).slice(0, 32).map(c => ({ r: Math.round(num(c.r, 0, 0, 11)), q: QS.indexOf(c.q) >= 0 ? c.q : 'major', b: c.b === null || c.b === undefined ? null : Math.round(num(c.b, 0, 0, 11)), beats: num(c.beats, 4, 0.5, 32), push: c.push === true }))
+    })).filter(x => x.chords.length);
+  }
+  if (out.learn) {
+    const seen = new Set(), fin = (v, lo, hi, d) => num(v, d, lo, hi);
+    out.learn = out.learn.filter(isObj).filter(x => typeof x.fid === 'string' && x.fid && !seen.has(x.fid) && seen.add(x.fid)).slice(0, 12).map(x => ({
+      fid: x.fid.slice(0, 240), name: typeof x.name === 'string' ? x.name.slice(0, 120) : 'Recording', size: Math.round(fin(x.size, 0, 1e10, 0)), seconds: Math.round(fin(x.seconds, 0, 36000, 0)),
+      key: isObj(x.key) ? { r: Math.round(fin(x.key.r, 0, 11, 0)), minor: !!x.key.minor } : { r: 0, minor: false }, simple: x.simple !== false, at: Math.round(fin(x.at, 0, 1e14, 0)),
+      segs: (Array.isArray(x.segs) ? x.segs : []).slice(0, 2000).filter(a => Array.isArray(a) && a.length === 4).map(a => [fin(a[0], 0, 36000, 0), fin(a[1], 0, 36000, 0), Math.round(fin(a[2], 0, 11, 0)), ['', 'm', '7', 'm7', 'maj7'].includes(a[3]) ? a[3] : ''])
+    }));
   }
   if (out.songs) {
     const taken = new Set();

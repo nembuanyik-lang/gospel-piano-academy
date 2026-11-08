@@ -157,6 +157,14 @@ handle('file:save-close', (id, keep) => {
   try { fs.unlinkSync(s.file + '.part'); } catch { /* already gone */ }
   return { ok: true, canceled: true };
 });
+/* the phone remote: runs only while switched on in the Record tab; commands go to the page, the page sends the words and chords */
+const { createRemote } = require('./lanremote');
+const remote = createRemote({ log, onCommand: (c) => { if (win && !win.isDestroyed()) win.webContents.send('remote:cmd', c); } });
+handle('remote:start', () => remote.start());
+handle('remote:stop', () => remote.stop());
+handle('remote:info', () => remote.info());
+ipcMain.on('remote:meta', (e, json) => { if (fromApp(e) && typeof json === 'string' && json.length < 98304) { try { remote.setMeta(JSON.parse(json)); } catch { /* ignore */ } } });
+ipcMain.on('remote:live', (e, json) => { if (fromApp(e) && typeof json === 'string' && json.length < 8192) { try { remote.setLive(JSON.parse(json)); } catch { /* ignore */ } } });
 handle('updates:check', () => { checkForUpdates(true); return { ok: true, update: updateState }; });
 
 function openExternalSafe(url) {
@@ -287,6 +295,7 @@ function start() {
   if (!app.requestSingleInstanceLock()) { app.quit(); return; }
 
   app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
+  app.on('will-quit', () => { remote.stop(); });
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
   app.whenReady().then(() => {

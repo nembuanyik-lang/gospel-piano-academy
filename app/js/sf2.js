@@ -129,6 +129,13 @@ const SF2 = (() => {
     b = ctx.createBuffer(1, n, rate);
     const out = b.getChannelData(0), src = new Int16Array(sf.buf, sf.smplOff + s.start * 2, n);
     for (let i = 0; i < n; i++) out[i] = src[i] / 32768;
+    // a looped sound jumps from the end of its loop back to the start; blend the end of the loop into the sound just before
+    // the start, so the jump cannot be heard (a bad loop is what makes a held pad or voice pulse: "whoa, whoa")
+    const ls = s.loopStart - s.start, le = s.loopEnd - s.start;
+    if (ls > 0 && le > ls + 64 && le <= n) {
+      const X = Math.min((le - ls) >> 2, ls, Math.round(b.sampleRate * 0.03));
+      for (let i = 0; i < X; i++) { const w = (i + 1) / X, idx = le - X + i; out[idx] = out[idx] * (1 - w) + out[ls - X + i] * w; }
+    }
     m.set(key, b); return b;
   }
   let nextId = 1;

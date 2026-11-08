@@ -1,5 +1,66 @@
 # Changelog
 
+## 2.10.0 — Seeing and fixing recordings, tabs, phone remote, learn from a recording, drums and chords
+
+- **Chords in every flavour**: a "Chord flavour" row (Plain, 7th, 9th, Add9, Sus4, Sus2, 6th, Gospel colour) turns the
+  chords of the key into that flavour, with a second list of colour chords outside the key. Any chord can still be
+  changed afterwards (type, bass note, length, push).
+- **Real drum recording**: "Use a real drum recording…" imports a drum loop or beat as the song's drums (stretched to the
+  tempo, pitch kept) and turns the built-in drums off (`beatWas` remembers them); "Go back to the built-in drums" restores them.
+- **Drummer's feel** (`P.human`, exact / light / loose): small repeatable timing and loudness differences
+  (`E.humanizeDrums`); the first kick of a bar stays on the beat, and a mix and its export match.
+- **More grooves**: Bikutsi, Assiko and Ndombolo, labelled as starting points.
+- **Fills and endings you choose**: fill kinds per part (snare roll, toms, quick fill, crash only) and two new endings
+  (slow down then hold; big finish with a snare roll and a full crash).
+- **Saved progressions** (`S.progs`, steps from the key so they fit any key): save a section's chords with a name, use them
+  (replace or add) in any song, delete them.
+- **Makossa drums**: the groove now has the hi-hat running in sixteenths (soft between the beats), kick pushes, snare on
+  2 and 4 with ghost notes and a rim click; a lighter "Makossa, light" groove was added; hi-hat sixteenths are softer in
+  every groove. These are starting points to be checked by ear (and changed in "My own beat" if needed).
+- **No more slow "whoa, whoa" after you let go of a key**: measured every instrument by rendering a held chord and
+  letting go. Strings, choir and the pad hung on for 1.5 to 2.4 seconds with a pulsing wobble. Now the release is capped
+  (`MAX_REL`, silent in under a second), each note has its own vibrato level that fades out as the note ends (`v.vibG`),
+  looped library sounds get a blended loop join (`SF2.bufferFor`), and the synthetic choir uses three voices and softer
+  vowel filters so it pulses less. Test: `tests/e2e/tails.test.js`.
+- **Song Lab in tabs** (Write, Arrange, Record, Mix, Share): the player, Undo/Redo, the keep-a-copy reminder and the
+  tab bar stay at the top; every card is still rendered, only the tab being looked at is shown (`.ptab`), so all the
+  existing behaviour is unchanged. The end-to-end tests tap the tab first through `tests/e2e/tabs.js`, like a person.
+- **Phone remote** (`lanremote.js` in the main process, `app/js/views-remote.js` in the page): a small web server that
+  runs only while switched on (Record tab). The phone opens `http://<computer>:8787/?k=<6-number code>` on the same
+  Wi-Fi (no internet; the page is built in) and sees the chords and words as they are sung, the whole-song chart, and
+  Play / Stop / Record buttons. Only those three commands are accepted; wrong codes are refused and 8 wrong tries lock it
+  for a minute; it stops when switched off or when the app quits. `liveStart` now builds what the singer sees with
+  `stageAt(...)`, which the phone shares.
+- **Learn from a recording** (`app/js/chordfinder.js`, `app/js/views-learn.js`, Song Lab › Learn from a recording): choose
+  an audio file (up to 25 MB); it is read at 11 kHz and the chords are found with a chroma (note colour) method, a
+  tuning correction for out-of-tune tapes and a smoothing step. Plain chords by default; 7th chords on request. Play at
+  50–100% speed with the pitch kept, repeat a part, jump by tapping a chord, show the chords in another key, fix a chord.
+  The chords (not the file) are kept for the last 12 recordings (`S.learn`, cleaned in `sanitize.js`).
+
+- **Undo and Redo** for everything in a song (`app/js/history.js`, Node-tested): pictures of the song's own data are
+  kept when it is saved; a slider drag is one step, every button press is its own; buttons and Ctrl+Z / Ctrl+Y (not
+  while typing in a text box). The recordings themselves are never copied. `GuideStore.del` keeps a deleted recording
+  until the song is left (`GuideStore.hold`), then `GuideStore.purge` removes what nothing points to, so Undo can
+  bring back a deleted take, and no orphan audio is left behind.
+- **Timeline** (`app/js/views-timeline.js`): a waveform for each recorded track along the song (peaks from
+  `VocalFX.peaks`, cached in `GuideStore.peaks`), the parts of the song and bars above, zoom, a moving cursor; drag
+  across a track or pick a part to choose a range.
+- **Fixing** without changing the recording: `g.mutes` (silenced ranges) and `g.patches` (ranges sung again), applied
+  by `VocalFX.applyEdits` with 15 to 20 ms crossfades before the vocal chain (`GuideStore.editedPcm`). **Punch-in**:
+  the band counts you in from a bar or two before (`scriptFrom`), only the chosen part is kept (a small WAV, level
+  matched with `VocalFX.matchGain`), saved and sanitised like a take, included in song packages. A new full take
+  starts clean (the old take's fixes are put away; Undo brings them back). Only the takes that are used are decoded.
+- **Keep a copy**: after recording, a reminder to save a song package (`P.recAt` / `P.pkgAt`, left out of Undo), on the
+  song and in the Song Lab list; asks the system to keep the storage (`navigator.storage.persist`) and refuses to
+  record when less than 150 MB is free.
+- **Words and chords on screen** while you play, record or sing a part again: big chord, next chord, the lines of
+  the part (the current line follows the song); can be hidden or switched off.
+- **Audio interface and microphone**: the device lists refresh when something is plugged in; input socket choice
+  (automatic, 1, 2 or both mixed); the output device can be chosen (`AudioContext.setSinkId`); the timing is measured
+  and kept for each microphone and output pair (`S.prefs.micLatencyById`); the recording rate is shown; the timing
+  slider reaches 500 ms.
+- Tests: 4 new unit tests, 7 new end-to-end tests (`tests/e2e/fixing.test.js`).
+
 ## 2.9.0 — The Song Lab becomes a gospel writing room
 
 - `app/js/songcraft.js` (pure, Node-tested): song chords stored relative to the key `{ r, q, b, beats, push }` with

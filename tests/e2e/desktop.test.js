@@ -1,3 +1,4 @@
+const T = require('./tabs').auto;
 // The app as the desktop app serves it: the exact Content-Security-Policy, file types and nosniff header of main.js
 // (read from main.js itself), so a script, worker or file the desktop app would block fails here too. Then a walk
 // through every screen at desktop and narrow widths, collecting errors, blocked content, missing files and layout
@@ -36,7 +37,7 @@ test.after(async () => { await browser.close(); srv.close(); });
 const OPTIONAL = /^\/(sounds\/|samples\/|vendor\/lame\.min\.js|fonts\/)/;
 async function open(width) {
   const ctx = await browser.newContext({ viewport: { width: width || 1280, height: 900 }, acceptDownloads: true });
-  const page = await ctx.newPage(), problems = [];
+  const page = T(await ctx.newPage()), problems = [];
   page.on('pageerror', e => problems.push('page error: ' + e.message));
   page.on('console', m => { const t = m.text(); if ((m.type() === 'error' || /Content Security Policy|Refused to/.test(t)) && !/Failed to load resource/.test(t)) problems.push('console: ' + t); });
   await page.addInitScript(() => { document.addEventListener('securitypolicyviolation', e => { (window.__csp = window.__csp || []).push(e.violatedDirective + ' ' + e.blockedURI); }); });

@@ -1,8 +1,20 @@
 'use strict';
 /* ---------------------------------------------------------------- version, what's new, credits
    APP_VERSION must match "version" in package.json (a unit test checks this). */
-const APP_VERSION = '2.9.0';
+const APP_VERSION = '2.10.0';
 const CHANGES = [
+  { v: '2.10.0', title: 'Fix, share and learn: a tidier Song Lab, a phone remote, and learning from recordings', items: [
+    'The Song Lab is in tabs (Write, Arrange, Record, Mix, Share) with the player and Undo/Redo always at the top.',
+    'Undo and Redo for everything in a song (buttons, or Ctrl+Z and Ctrl+Y). A recording you delete comes back with Undo until you leave the song.',
+    'A timeline shows each recording as a waveform. Choose a part, silence it, or sing just that part again (punch-in). The new piece is joined at the same loudness, and the original recording is never changed.',
+    'Words and chords in big letters while you play or record, and a reminder to keep a copy of your recordings as a song package.',
+    'Phone remote: on the Record tab, turn it on and open the address on a phone on the same Wi-Fi (no internet). The phone shows the chords and words as they are sung, and has Play, Stop and Record buttons.',
+    'Learn from a recording: choose a song or a church tape. The app finds the chords and the key; play it at 50 to 85 percent speed with the pitch kept, repeat a hard part, show the chords in another key, and fix any chord. Your fixes are remembered.',
+    'Chords in every flavour: Plain, 7th, 9th, Add9, Sus4, Sus2, 6th and Gospel colour, plus colour chords from outside the key. Save your own chord progressions and use them in any song and any key.',
+    'Drums: a new Makossa groove with a running hi-hat and a lighter Makossa, plus Bikutsi, Assiko and Ndombolo starting points. A drummer\'s feel (light or loose), a choice of fills for each part, and two new endings (slow down then hold, and a big finish). Use a real drum recording of your own instead of the built-in drums.',
+    'Instruments: strings, choir and the warm pad no longer hang on with a slow wobble after you let go of a key.',
+    'Ready for an audio interface and a better microphone: choose the microphone input channel and the sound output, timing is remembered for each microphone and headphones pair, and the voice timing nudge goes up to 500 ms.'
+  ] },
   { v: '2.9.0', title: 'The Song Lab becomes a gospel writing room', items: [
     'Any chord: sevenths, ninths, elevenths, thirteenths, altered chords, slash chords (F/G), borrowed chords (the minor iv, ♭VII), passing diminished chords and the tritone substitute. Play them in from your keyboard, tap them from the key or the Gospel colours, or take a suggestion for what could come next.',
     'Each chord has its own length, and can be pushed to arrive half a beat early. Up to 32 chords in a section.',

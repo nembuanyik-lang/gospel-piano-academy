@@ -1,3 +1,4 @@
+const T = require('./tabs').auto;
 // Sound engine in a real browser: the instrument library (SoundFont) is loaded, plays in tune, drives drums
 // and the Song Lab bass, and the gospel organ, Leslie and rooms work. Uses a small synthetic SoundFont.
 const test = require('node:test');
@@ -15,7 +16,7 @@ test.after(async () => { await browser.close(); srv.close(); });
 
 async function open(withBank) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-  const page = await ctx.newPage();
+  const page = T(await ctx.newPage());
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });

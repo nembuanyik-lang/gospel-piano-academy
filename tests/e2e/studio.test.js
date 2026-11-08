@@ -1,3 +1,4 @@
+const T = require('./tabs').auto;
 // The vocal studio in the Song Lab, with a fake microphone singing D E F# G A G F# E D: 24-bit takes, hearing
 // yourself while recording, the level and room check, timing calibration, comping, and the vocal chain.
 const test = require('node:test');
@@ -20,7 +21,7 @@ test.after(async () => { await browser.close(); srv.close(); });
 
 async function open() {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true, permissions: ['microphone'] });
-  const page = await ctx.newPage(), errors = [];
+  const page = T(await ctx.newPage()), errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
   await page.goto('http://localhost:' + PORT + '/');

@@ -160,7 +160,7 @@ const BINDS = {
   pkey: el => { const P = curProj(); P.key = el.value; touch(); render(); },
   pbeat: el => { const P = curProj(); P.beat = el.value; touch(); render(); },
   pstyle: el => { const P = curProj(); P.style = el.value; touch(); render(); },
-  psev: el => { const P = curProj(); P.sev = el.checked; touch(); render(); },
+  psev: el => { const P = curProj(); P.sev = el.checked; pst().flav = null; touch(); render(); },
   ptitle: el => { const P = curProj(); P.title = el.value; touch(); },
   lchorus: el => { const P = curProj(); P.lyrics.chorus = el.value; P.steps.chorus = P.steps.chorus && el.value.trim().length > 0; touch(); },
   lverse: el => { const P = curProj(); P.lyrics.verse = el.value; touch(); },
@@ -176,7 +176,7 @@ const BINDS = {
   psound: el => { S.prefs.sound = el.checked; touch(); },
   pslow: el => { S.prefs.speed = el.checked ? 'slow' : 'normal'; touch(); }
 };
-const LIVE = new Set(['pbpm', 'pswing', 'pguidegain', 'pguidenudge', 'mxvol', 'mxpan', 'pinfo', 'plgain', 'ploff', 'resettext', 'csearch', 'slbpm', 'ptitle', 'lchorus', 'lverse', 'lbridge', 'obname', 'pname']);
+const LIVE = new Set(['pprogname', 'pbpm', 'pswing', 'pguidegain', 'pguidenudge', 'mxvol', 'mxpan', 'pinfo', 'plgain', 'ploff', 'resettext', 'csearch', 'slbpm', 'ptitle', 'lchorus', 'lverse', 'lbridge', 'obname', 'pname']);
 /* the song project studio brings its own actions and bindings (views-project.js) */
 Object.assign(ACTIONS, PROJECT_ACTIONS, VOICE_ACTIONS, GOSPEL_ACTIONS);
 Object.assign(BINDS, PROJECT_BINDS, GOSPEL_BINDS);
@@ -184,8 +184,10 @@ document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]'); if (!el || el.disabled) return;
   const fn = ACTIONS[el.dataset.act]; if (fn) { e.preventDefault(); fn(el, e); }
 });
-document.addEventListener('change', e => { const b = e.target.dataset && e.target.dataset.bind; if (b && BINDS[b] && !LIVE.has(b)) BINDS[b](e.target); else if (b && LIVE.has(b)) BINDS[b](e.target); });
-document.addEventListener('input', e => { const b = e.target.dataset && e.target.dataset.bind; if (b && LIVE.has(b)) BINDS[b](e.target); });
+// sliders and text boxes change many times in a second: Undo counts those as one step (see history.js)
+const liveBind = (b, el) => { try { if (typeof SongHistory !== 'undefined') SongHistory.setLive(true); } catch (e) { /* optional */ } try { BINDS[b](el); } finally { try { if (typeof SongHistory !== 'undefined') SongHistory.setLive(false); } catch (e) { /* optional */ } } };
+document.addEventListener('change', e => { const b = e.target.dataset && e.target.dataset.bind; if (b && BINDS[b] && !LIVE.has(b)) BINDS[b](e.target); else if (b && LIVE.has(b)) liveBind(b, e.target); });
+document.addEventListener('input', e => { const b = e.target.dataset && e.target.dataset.bind; if (b && LIVE.has(b)) liveBind(b, e.target); });
 
 /* ---------------------------------------------------------------- boot */
 function buildChrome() {

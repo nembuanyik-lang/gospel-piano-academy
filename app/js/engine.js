@@ -607,9 +607,30 @@ const BEATS = {
   sunday:   { label: 'Sunday slow gospel (half-time)', n: 16, k: [0, 7, 10], s: [8], g: [3, 13, 15], h: [0, 2, 4, 6, 8, 10, 12, 14] },
   praisebreak: { label: 'Praise break', n: 16, k: [0, 4, 8, 12], s: [4, 12], g: [1, 7, 9, 14, 15], o: [2, 6, 10, 14], cl: [4, 12] },
   shout:    { label: 'Shout (holy dance)', n: 16, k: [0, 4, 8, 12], s: [2, 6, 10, 14], h: [0, 4, 8, 12], cl: [2, 6, 10, 14] },
-  makossa:  { label: 'Makossa feel (Cameroon)', n: 16, k: [0, 8, 11], s: [4, 12], r: [3, 7, 14], h: [0, 4, 8, 12], o: [2, 6, 10, 14] },
+  // Makossa: a steady four-beat groove with the hi-hat running in sixteenths (soft between the beats), the kick on 1 and 3 with
+  // pushes before the beat, the snare on 2 and 4 with soft ghost notes, and a rim click answering the bass
+  makossa:  { label: 'Makossa (Cameroon, running hi-hat)', n: 16, k: [0, 6, 8, 11], s: [4, 12], g: [7, 15], r: [3, 10], h: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], o: [14] },
+  makossalight: { label: 'Makossa, light (rim click, softer)', n: 16, k: [0, 8, 11], r: [4, 12, 3, 7, 14], g: [6, 15], h: [0, 2, 4, 6, 8, 10, 12, 14], o: [10] },
+  // Cameroonian and Central African grooves: starting points to be checked by ear and changed in "My own beat"
+  bikutsi:  { label: 'Bikutsi (fast, driving; starting point)', n: 16, k: [0, 4, 8, 12], s: [4, 12], g: [7, 15], h: [0, 2, 4, 6, 8, 10, 12, 14], r: [0, 3, 6, 10, 12] },
+  assiko:   { label: 'Assiko (12-beat bell pattern; starting point)', n: 12, k: [0, 6], s: [3, 9], r: [0, 2, 4, 5, 7, 9, 11], h: [0, 3, 6, 9] },
+  ndombolo: { label: 'Ndombolo / soukous (fast; starting point)', n: 16, k: [0, 4, 8, 12], s: [4, 12], g: [10, 11, 14, 15], h: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], o: [6] },
   custom:   { label: 'My own beat (grid)' }
 };
+/* a human feel: tiny, repeatable differences in timing and loudness (the same every time it plays, so a mix and its export match).
+   level 1 = light, 2 = loose. The first kick of each bar stays exactly on the beat. */
+function humanizeDrums(ev, level, bpm) {
+  level = Math.max(0, Math.min(2, Math.round(+level || 0))); if (!level || !ev.length) return ev;
+  const ms = level === 1 ? 6 : 12, vv = level === 1 ? 0.08 : 0.16, beat = 60000 / (bpm || 100);
+  const h = (a, b) => { let x = (Math.round(a * 1000) * 2654435761 + b * 40503) >>> 0; x ^= x >>> 15; x = Math.imul(x, 2246822519) >>> 0; x ^= x >>> 13; return (x >>> 0) / 4294967295 * 2 - 1; };
+  return ev.map((e, i) => {
+    if (!e.drum || e.drum === 'sw') return e;
+    const code = e.drum.charCodeAt(0) + (e.drum.length > 1 ? e.drum.charCodeAt(1) : 0);
+    const anchor = e.drum === 'k' && Math.abs(e.t % 4) < 1e-6;
+    const dt = anchor ? 0 : (h(e.t, code) * ms + (e.drum === 'h' || e.drum === 'o' ? 2 : e.drum === 's' ? 3 : 0)) / beat;
+    return Object.assign({}, e, { t: Math.max(0, e.t + dt), vel: Math.max(0.05, Math.min(1, (e.vel || 0.7) * (1 + h(e.t + 0.37, code + 7) * vv))) });
+  });
+}
 /* drum events for `bars` bars of 4 beats. o = { beat, swing (0-60), grid } */
 function beatEvents(o, bars) {
   const id = (o && o.beat) || 'none';
@@ -628,7 +649,7 @@ function beatEvents(o, bars) {
       let t = bar * 4 + i * len;
       if (b.n === 16 && i % 2 === 1) t += len * sw;
       // g = a ghost note on the snare (very soft); hi-hats lean on the beat
-      ev.push({ t, d: 0.1, drum: r === 'g' ? 's' : r, vel: r === 'h' && i % per === 0 ? 0.55 : VEL[r] });
+      ev.push({ t, d: 0.1, drum: r === 'g' ? 's' : r, vel: r === 'h' ? (i % per === 0 ? 0.55 : b.n === 16 && i % 2 === 1 ? VEL.h * 0.7 : VEL.h) : VEL[r] });   // hi-hat: strong on the beat, softer on the sixteenths in between
     }));
   }
   return ev;
@@ -640,7 +661,7 @@ const Engine = {
   parseName, parseToken, pcOfName, midiOf, fmt, midiName, pcName, isBlack, spell,
   chordNames, chordPcs, chordSymbol, chordMidi, toneLabel, identifyChord, nameInterval, CHORD_TYPES, compareToChord, compareToVoicing,
   scaleNotes, scaleMidis, scaleTokens, diatonic, progressionChords, voiceProgression, romanFor, numberFor,
-  seqEvents, arpEvents, blockEvent, progEvents, toEvents, BEATS, beatEvents,
+  seqEvents, arpEvents, blockEvent, progEvents, toEvents, BEATS, beatEvents, humanizeDrums,
   scoreTaps, steadiness, dateStr, addDays, streak, rankFor,
   earQuestion, mulberry, pick, shuffle
 };

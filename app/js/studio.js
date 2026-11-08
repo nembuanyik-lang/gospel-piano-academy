@@ -44,7 +44,7 @@ function migrateProject(P) {
 }
 function formItem(i) {
   return { s: i.s, up: Math.max(-6, Math.min(11, Math.round(+i.up || 0))), x: Math.max(1, Math.min(8, Math.round(+i.x || 1))), tag: Math.max(0, Math.min(8, Math.round(+i.tag || 0))),
-    stop: i.stop === true, vamp: i.vamp === true, en: ['soft', 'full'].includes(i.en) ? i.en : '', lead: i.lead !== false, fill: i.fill === true, swell: i.swell === true };
+    stop: i.stop === true, vamp: i.vamp === true, en: ['soft', 'full'].includes(i.en) ? i.en : '', lead: i.lead !== false, fill: i.fill === true, fk: FILL_KINDS[i.fk] ? i.fk : '', swell: i.swell === true };
 }
 /* keep the older fields in step (lessons, the Songbook lead sheet and older backups read them) */
 function syncLegacy(P) {
@@ -160,6 +160,7 @@ function drumEvents(P, beats, energy) {
       pat.h.forEach(o => ev.push({ t: b + o, d: 0.1, drum: 'h', vel: o % 1 ? 0.32 : 0.45 }));
     }
   }
+  ev = E.humanizeDrums(ev, P.human, P.bpm);
   return ev.filter(e => e.t < beats - 0.001 && !(light && (e.drum === 's' || e.drum === 'cl'))).map(e => Object.assign({}, e, { vel: (e.vel || 0.6) * (0.55 + 0.45 * energy) }));
 }
 const DRUM_MIDI = { k: 36, s: 38, h: 42, o: 46, r: 37, cl: 39, c: 49, th: 50, tm: 47, tl: 43, sw: 52 };
@@ -190,7 +191,7 @@ function arrangeSection(P, type, o) {
     if (energy >= 0.9 && !o.tagPass) dr.push({ t: 0, d: 0.1, drum: 'c', vel: 0.7 });
     sc.chs.forEach((ch, i) => { if (ch.spec.push && i > 0) { dr = dr.filter(e => Math.abs(e.t - ch.t) > 0.01 || e.drum === 'h'); dr.push({ t: ch.t, d: 0.1, drum: 'k', vel: 0.85 }); if (energy >= 0.8) dr.push({ t: ch.t, d: 0.1, drum: 'c', vel: 0.6 }); } });
     if (o.stop) { dr = dr.filter(e => e.t < lastBar - 1e-6); dr.push({ t: lastBar, d: 0.1, drum: 'k', vel: 0.95 }, { t: lastBar, d: 0.1, drum: 'c', vel: 0.8 }); }
-    else if (o.fill) { const f = fillEvents(beats, meter.bar, energy); dr = dr.filter(e => e.t < f.from - 1e-6 || e.drum === 'h' && false).concat(f.ev); }
+    else if (o.fill) { const f = fillEvents(beats, meter.bar, energy, o.fk); dr = dr.filter(e => e.t < f.from - 1e-6 || e.drum === 'h' && false).concat(f.ev); }
     if (o.crashIn && !dr.some(e => e.drum === 'c' && e.t < 0.01)) dr.push({ t: 0, d: 0.1, drum: 'c', vel: 0.75 });
     dr.forEach(e => { e.vel *= bk; events.push(e); parts.drums.push({ t: e.t, d: 0.25, m: DRUM_MIDI[e.drum] || 38, v: Math.round(40 + Math.min(1, e.vel) * 80) }); });
   }
@@ -245,7 +246,7 @@ function arrangeSong(P, o) {
   form.forEach((it, idx) => {
     const next = form[idx + 1], sec = P.sections[it.s], energy = ENERGY_SET[it.en] || ENERGY[it.s] || 0.8;
     const base = { shift: it.up, energy, melody: o.melody, melInst: o.melInst, choir: o.choir !== undefined ? o.choir : !!(P.choir && P.choir.on), focus: o.focus };
-    const touches = last => ({ fill: last && it.fill && !it.stop, swell: last && it.swell && !it.stop });
+    const touches = last => ({ fill: last && it.fill && !it.stop, fk: it.fk, swell: last && it.swell && !it.stop });
     const lead = next && next.up !== it.up && next.lead !== false ? SC.mod(next.up + 7 - it.up) : null;
     markers.push({ t: at, text: itemLabel(it, P) });
     for (let k = 0; k < it.x; k++) {
@@ -262,15 +263,7 @@ function arrangeSong(P, o) {
   // the ending
   const endKind = ENDINGS[P.ending] ? P.ending : 'none', bars = meterOf(P).bar;
   let fade = null, rit = null;
-  if (endKind === 'hold' && timeline.length) {
-    const lastSeg = timeline[timeline.length - 1], ch = lastSeg.chs[lastSeg.chs.length - 1], v = SC.voice(P.key, [ch.spec], form[lastSeg.idx] ? form[lastSeg.idx].up : 0)[0], len = bars * 2;
-    events.push({ t: at, d: len, notes: v.rh, vel: 0.7 }, { t: at, d: len, notes: [v.bass], vel: 0.7, part: 'bass' });
-    if (P.beat && P.beat !== 'none') events.push({ t: at, d: 0.1, drum: 'c', vel: 0.8 }, { t: at, d: 0.1, drum: 'k', vel: 0.9 });
-    v.rh.forEach(m => parts.chords.push({ t: at, d: len, m, v: 80 })); parts.bass.push({ t: at, d: len, m: v.bass, v: 80 });
-    timeline.push({ type: lastSeg.type, label: 'Ending (hold)', start: at, beats: len, chs: [Object.assign({}, ch, { t: at, d: len })], key: lastSeg.key, idx: lastSeg.idx });
-    markers.push({ t: at, text: 'Ending' });
-    at += len;
-  } else if (endKind === 'ritard' && at > bars * 2) {
+  if ((endKind === 'ritard' || endKind === 'ritardhold') && at > bars * 2) {
     // the last two bars slow to about 60% of the tempo: every beat after the start of the slowdown is moved later
     const T0 = at - bars * 2, span = bars * 2, slow = 0.67;
     rit = { from: T0, to: at, span, slow };
@@ -280,6 +273,22 @@ function arrangeSong(P, o) {
     timeline.forEach(sg => { const a = warp(sg.start), b = warp(sg.start + sg.beats); sg.chs.forEach(c => { const ca = warp(c.t), cb = warp(c.t + c.d); c.t = ca; c.d = cb - ca; }); sg.start = a; sg.beats = b - a; });
     at = warp(at); markers.push({ t: warp(T0), text: 'Slowing down' });
   } else if (endKind === 'fade' && at > bars) fade = { from: at - Math.min(bars * 4, at / 2), to: at };   // four bars, or the second half of a very short song
+  if (['hold', 'ritardhold', 'bigfinish'].includes(endKind) && timeline.length) {
+    const big = endKind === 'bigfinish', lastSeg = timeline[timeline.length - 1], ch = lastSeg.chs[lastSeg.chs.length - 1], v = SC.voice(P.key, [ch.spec], form[lastSeg.idx] ? form[lastSeg.idx].up : 0)[0], len = bars * 2;
+    events.push({ t: at, d: len, notes: v.rh, vel: 0.7 }, { t: at, d: len, notes: [v.bass], vel: 0.7, part: 'bass' });
+    if (P.beat && P.beat !== 'none') events.push({ t: at, d: 0.1, drum: 'c', vel: big ? 0.95 : 0.8 }, { t: at, d: 0.1, drum: 'k', vel: 0.9 });
+    if (big) {   // a snare roll through the last bar, building up, and toms with the final hit
+      const from = Math.max(0, at - bars), n = Math.round(bars * 4); const roll = [];
+      for (let q = 0; q < n; q++) roll.push({ t: from + q * 0.25 * (bars / (n / 4)), d: 0.1, drum: 's', vel: 0.4 + 0.55 * (q / n) });
+      roll.forEach(r => { if (r.t < at) { events.push(r); parts.drums.push({ t: r.t, d: 0.25, m: 38, v: Math.round(40 + r.vel * 80) }); } });
+      events.push({ t: at, d: 0.1, drum: 'tl', vel: 0.9 }, { t: at, d: 0.1, drum: 's', vel: 0.9 });
+      parts.drums.push({ t: at, d: 0.25, m: 49, v: 115 }, { t: at, d: 0.25, m: 36, v: 110 });
+    }
+    v.rh.forEach(m => parts.chords.push({ t: at, d: len, m, v: 80 })); parts.bass.push({ t: at, d: len, m: v.bass, v: 80 });
+    timeline.push({ type: lastSeg.type, label: 'Ending (hold)', start: at, beats: len, chs: [Object.assign({}, ch, { t: at, d: len })], key: lastSeg.key, idx: lastSeg.idx });
+    markers.push({ t: at, text: 'Ending' });
+    at += len;
+  }
   void bar;
   const segs = timeline.map(t => ({ type: t.type, start: t.start, beats: t.beats, up: form[t.idx] ? form[t.idx].up : 0 }));
   midiLoopEvents(P, segs).forEach(e => { events.push(e); if (e.drum) parts.drums.push({ t: e.t, d: 0.25, m: DRUM_MIDI[e.drum] || 38, v: Math.round(40 + e.vel * 80) }); else (parts.loops = parts.loops || []).push({ t: e.t, d: e.d, m: e.notes[0], v: Math.round(e.vel * 110) }); });
@@ -449,10 +458,25 @@ async function recordedAudio(P, o) {
 }
 
 /* ---- arrangement touches: drum fills, swells, endings ---- */
-const ENDINGS = { none: 'Stop at the end', hold: 'Hold the last chord (a fermata)', ritard: 'Slow down over the last two bars', fade: 'Fade out over the last four bars' };
-/* a drum fill on the last beats of a section: snare and toms rolling down, louder as it goes */
-function fillEvents(beats, bar, energy) {
-  const ev = [], long = energy >= 0.85 && bar === 4, start = beats - (long ? 2 : 1), step = bar === 4 ? 0.25 : 0.5;
+const ENDINGS = { none: 'Stop at the end', hold: 'Hold the last chord (a fermata)', ritard: 'Slow down over the last two bars', ritardhold: 'Slow down, then hold the last chord', bigfinish: 'Big finish: drum roll, then a full final hit that rings', fade: 'Fade out over the last four bars' };
+const FILL_KINDS = { snare: 'Snare roll (builds up)', toms: 'Toms rolling down', half: 'Quick fill (last beat only)', crash: 'No fill: just a crash into the next part' };
+/* a drum fill on the last beats of a section: snare and toms rolling down, louder as it goes. kind: '' (the usual one for the section's energy),
+   'snare', 'toms', 'half' or 'crash' */
+function fillEvents(beats, bar, energy, kind) {
+  const ev = [], long = energy >= 0.85 && bar === 4;
+  if (kind === 'crash') return { from: beats - 0.25, ev: [{ t: beats - 0.25, d: 0.1, drum: 'k', vel: 0.8 }] };
+  if (kind === 'snare') {   // two beats of snare: eighths, then sixteenths, getting louder
+    const start = beats - (bar === 4 ? 2 : 1), n = bar === 4 ? 12 : 6; let t = start;
+    for (let i = 0; i < n; i++) { ev.push({ t, d: 0.1, drum: 's', vel: 0.45 + 0.5 * (i / n) }); t += i < n / 3 ? 0.5 * (bar === 4 ? 1 : 0.5) : 0.25 * (bar === 4 ? 1 : 0.5); if (t >= beats - 0.01) break; }
+    ev.push({ t: start, d: 0.1, drum: 'k', vel: 0.8 });
+    return { from: start, ev };
+  }
+  if (kind === 'toms' || kind === 'half') {
+    const len = kind === 'half' ? 1 : (bar === 4 ? 2 : 1), start = beats - len, step = len / (kind === 'half' ? 4 : bar === 4 ? 8 : 4), kit = kind === 'half' ? ['s', 'th', 'tm', 'tl'] : ['th', 'th', 'tm', 'tm', 'tl', 'tl', 'k', 's'];
+    kit.slice(0, Math.round(len / step)).forEach((d, i, a) => ev.push({ t: start + i * step, d: 0.1, drum: d, vel: 0.55 + 0.4 * (i / a.length) }));
+    return { from: start, ev };
+  }
+  const start = beats - (long ? 2 : 1), step = bar === 4 ? 0.25 : 0.5;
   const kit = long ? ['s', 's', 'th', 'th', 'tm', 'tm', 'tl', 'tl'] : bar === 4 ? ['s', 's', 'th', 'tl'] : ['s', 'th', 'tl'];
   kit.forEach((d, i) => ev.push({ t: start + i * step, d: 0.1, drum: d, vel: 0.55 + 0.4 * (i / kit.length) }));
   ev.push({ t: start, d: 0.1, drum: 'k', vel: 0.8 });
@@ -626,7 +650,7 @@ async function exportPackage(P) {
       const crc = crc32(new Uint8Array(await blob.arrayBuffer()));   // read once for the checksum, then written straight out
       await zw.add(path, blob, crc); audio.push({ key, file: path, type: blob.type || '' });
     };
-    for (const r of recordedTracks(P)) for (const t of r.T.takes) await add(t.k, 'audio/' + t.k.replace(/[^A-Za-z0-9]+/g, '_') + '.wav');
+    for (const r of recordedTracks(P)) for (const t of r.T.takes.concat(r.T.patches || [])) await add(t.k, 'audio/' + t.k.replace(/[^A-Za-z0-9]+/g, '_') + '.wav');
     for (const L of (P.loops || [])) if (L.kind !== 'midi') await add(loopKey(P, L), 'loops/' + L.id + '_' + String(L.name || 'loop').replace(/[^A-Za-z0-9]+/g, '-').slice(0, 30));
     const manifest = { format: PKG_FORMAT, version: 1, app: typeof APP_VERSION !== 'undefined' ? APP_VERSION : '', created: new Date().toISOString(), title: P.title || '', id: P.id, audio, missing };
     const te = new TextEncoder();
@@ -635,6 +659,7 @@ async function exportPackage(P) {
     await zw.add('README.txt', te.encode('This is a Gospel Music Academy song package: "' + (P.title || 'My song') + '".\r\nOpen it in the app: Song Lab > My song projects > Open a song package.\r\nIt holds the song (chords, melody, words, settings) and ' + audio.length + ' recordings and loops.\r\n' + (copyrightLine(P) || '')));
     await zw.finish();
     const done = await sink.close(true);
+    if (!missing.length) { P.pkgAt = Date.now(); touch(); }   // everything is in the package: the reminder can rest
     return { name: done.name, bytes: done.bytes, count: audio.length, missing: missing.length, disk: sink.disk };
   } catch (e) { await sink.close(false).catch(() => {}); throw e; }
 }
@@ -650,7 +675,8 @@ async function importPackage(bytes) {
     id = 'p' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
     const fix = k => (typeof k === 'string' && k.indexOf(oldId) === 0 ? id + k.slice(oldId.length) : k);
     if (raw.guide && Array.isArray(raw.guide.takes)) raw.guide.takes.forEach(t => { t.k = fix(t.k); });
-    (raw.tracks || []).forEach(T => (T.takes || []).forEach(t => { t.k = fix(t.k); }));
+    if (raw.guide && Array.isArray(raw.guide.patches)) raw.guide.patches.forEach(t => { t.k = fix(t.k); });
+    (raw.tracks || []).forEach(T => { (T.takes || []).forEach(t => { t.k = fix(t.k); }); (T.patches || []).forEach(t => { t.k = fix(t.k); }); });
     if (taken.has(oldId) && S.songs.some(x => x.title === raw.title)) raw.title = String(raw.title || 'My song').slice(0, 70) + ' (copy)';
   }
   raw.id = id;
@@ -664,6 +690,7 @@ async function importPackage(bytes) {
     if (key.indexOf(id) !== 0 && key.indexOf('loop:' + id + ':') !== 0) continue;   // only this song's own audio
     await GuideStore.put(key, new Blob([data], { type: a.type || (/\.wav$/.test(a.file) ? 'audio/wav' : '') })); stored++;
   }
+  if (stored) P.pkgAt = Date.now();   // its recordings came from a package, so they are already kept in one
   S.songs.push(P); touch();
   return { P, stored, total: (man.audio || []).length };
 }
@@ -787,6 +814,8 @@ function normTrack(g) {
   g.comp = g.comp && typeof g.comp === 'object' ? g.comp : {};
   g.fx = g.fx && VocalFX.PRESETS[g.fx.preset] ? g.fx : { preset: 'off', nr: 'preset' };
   if (g.gain == null) g.gain = 1; if (!g.pan) g.pan = 0;
+  // edits that never change the recording itself: parts silenced (mutes) and parts sung again (patches), in seconds of the take
+  g.mutes = Array.isArray(g.mutes) ? g.mutes : []; g.patches = Array.isArray(g.patches) ? g.patches : [];
   return g;
 }
 function guideOf(P) {   // older projects: one take stored under the project id
@@ -816,32 +845,67 @@ const GuideStore = (function () {
     const c = Snd.ensure(); if (!c) return null;
     const b = await c.decodeAudioData(await blob.arrayBuffer()); raw.set(k, b); return b;
   }
-  const sig = (P, g) => JSON.stringify([g.takes.map(t => t.k), g.main, g.comp, g.fx, P.bpm, P.ts, (P.form || []).length, GuideStore.profileStamp]);
-  const done2 = new Map();
-  void done2;
+  const sig = (P, g) => JSON.stringify([g.takes.map(t => t.k), g.main, g.comp, g.fx, P.bpm, P.ts, (P.form || []).length, GuideStore.profileStamp, g.mutes, g.patches]);
+  const pending = new Map(), pk = new Map();   // pending: recordings to remove when you leave the song; pk: pictures of the sound
   return {
     profileStamp: 0,
-    async put(id, blob) { raw.delete(id); done.clear(); return tx('readwrite', st => st.put(blob, id)); },
+    hold: false,   // true while a song is open: deleted recordings are kept until you leave, so Undo can bring them back
+    async put(id, blob) { raw.delete(id); done.clear(); pending.delete(id); return tx('readwrite', st => st.put(blob, id)); },
     async get(id) { return tx('readonly', st => st.get(id)); },
-    async del(id) { raw.delete(id); done.clear(); return tx('readwrite', st => st.delete(id)); },
+    async del(id) { raw.delete(id); done.clear(); if (this.hold) { pending.set(id, 1); return; } return tx('readwrite', st => st.delete(id)); },
+    /* when you leave a song: remove the recordings of this song that nothing points to any more (deleted takes, takes
+       that Undo took away, patches that were removed). Returns how many were removed. */
+    async purge(P) {
+      if (!P || !P.id) return 0;
+      const keys = (await tx('readonly', st => st.getAllKeys()).catch(() => [])) || [], ref = new Set(projectAudioKeys(P));
+      const mine = keys.filter(k => typeof k === 'string' && (k === P.id || k.indexOf(P.id + ':') === 0 || k.indexOf('loop:' + P.id + ':') === 0) && !ref.has(k));
+      for (const k of mine) { raw.delete(k); await tx('readwrite', st => st.delete(k)).catch(() => {}); }
+      pending.clear(); return mine.length;
+    },
     takeBuffer: decode,
     /* the finished guide; opts.raw = the chosen take only, no comping or processing */
     async buffer(P, opts) { return this.trackBuffer(P, guideOf(P), opts); },
+    /* the chosen take with the best parts joined (comping), the re-recorded parts put in (patches) and the silenced
+       parts removed (mutes): { pcm, sr }, not yet through the vocal chain. The recordings themselves are not changed. */
+    async editedPcm(P, g, bufs) {
+      // only the takes that are used (the main one and the ones picked in comping) are read: a long take is large in memory
+      const need = new Set([g.main].concat(Object.keys(g.comp || {}).map(k => g.comp[k])));
+      bufs = bufs || await Promise.all(g.takes.map((t, i) => (need.has(i) ? decode(t.k).catch(() => null) : null)));
+      if (!bufs[g.main]) return null;
+      const sr = bufs[g.main].sampleRate;
+      let pcm = bufs[g.main].getChannelData(0);
+      const picks = Object.keys(g.comp).length ? guideParts(P).map((p, i) => (g.comp[i] >= 0 && g.comp[i] < bufs.length && bufs[g.comp[i]] ? g.comp[i] : -1)) : [];
+      if (picks.some(x => x >= 0)) pcm = VocalFX.comp(bufs.map(b => (b ? b.getChannelData(0) : new Float32Array(0))), g.main, guideParts(P), picks, sr);
+      if ((g.patches && g.patches.length) || (g.mutes && g.mutes.length)) {
+        const patches = [];
+        for (const p of g.patches || []) { const b = await decode(p.k).catch(() => null); if (b) patches.push({ a: p.a, b: p.b, t0: p.t0, fade: p.fade, pcm: b.getChannelData(0) }); }
+        pcm = VocalFX.applyEdits(pcm, sr, { patches, mutes: g.mutes || [] });
+      }
+      return { pcm, sr };
+    },
+    /* a picture of the finished-but-unprocessed track for the timeline: { peaks (min,max pairs, 100 per second), dur } */
+    async peaks(P, g) {
+      if (!g || !g.takes || !g.takes.length) return null;
+      const key = P.id + ':' + (g.id || '') + sig(P, g);
+      if (pk.has(key)) return pk.get(key);
+      const E = await this.editedPcm(P, g); if (!E) return null;
+      const r = { peaks: VocalFX.peaks(E.pcm, E.sr, 100), dur: E.pcm.length / E.sr };
+      g.takes.forEach(t => raw.delete(t.k)); (g.patches || []).forEach(p => raw.delete(p.k));
+      pk.set(key, r); if (pk.size > 40) pk.delete(pk.keys().next().value);
+      return r;
+    },
     async trackBuffer(P, g, opts) {
       if (!g || !g.takes || !g.takes.length) return null;
       opts = opts || {};
       if (opts.raw) return decode(g.takes[g.main].k);
       const key = P.id + ':' + (g.id || '') + sig(P, g) + (opts.light ? '#light' : '');
       if (done.has(key)) return done.get(key);
-      const bufs = await Promise.all(g.takes.map(t => decode(t.k).catch(() => null)));
-      if (!bufs[g.main]) return null;
-      const sr = bufs[g.main].sampleRate, c = Snd.ensure();
-      let pcm = bufs[g.main].getChannelData(0);
-      const picks = Object.keys(g.comp).length ? guideParts(P).map((p, i) => (g.comp[i] >= 0 && g.comp[i] < bufs.length && bufs[g.comp[i]] ? g.comp[i] : -1)) : [];
-      if (picks.some(x => x >= 0)) pcm = VocalFX.comp(bufs.map(b => (b ? b.getChannelData(0) : new Float32Array(0))), g.main, guideParts(P), picks, sr);
+      const E = await this.editedPcm(P, g);
+      if (!E) return null;
+      const sr = E.sr, c = Snd.ensure(), pcm = E.pcm;
       let out;
       // memory saver: the takes joined (comped) but not processed, mono; the vocal sound is added while it plays
-      if (opts.light) { out = c.createBuffer(1, pcm.length, sr); out.getChannelData(0).set(pcm); g.takes.forEach(t => raw.delete(t.k)); if (!opts.noCache) done.set(key, out); return out; }
+      if (opts.light) { out = c.createBuffer(1, pcm.length, sr); out.getChannelData(0).set(pcm); g.takes.forEach(t => raw.delete(t.k)); (g.patches || []).forEach(p => raw.delete(p.k)); if (!opts.noCache) done.set(key, out); return out; }
       if (g.fx.preset && g.fx.preset !== 'off') {
         const nr = VocalFX.NR_LEVELS[g.fx.nr], prof = await this.profile().catch(() => null);
         const y = await VocalFX.chainAsync(pcm, sr, g.fx.preset, { nr: nr === null || nr === undefined ? undefined : nr, profile: prof && prof.sr === sr ? prof : null });
@@ -849,7 +913,7 @@ const GuideStore = (function () {
         out = c.createBuffer(r.channels.length, r.channels[0].length, sr); r.channels.forEach((d, i) => out.getChannelData(i).set(d));
       } else { out = c.createBuffer(1, pcm.length, sr); out.getChannelData(0).set(pcm); }
       // the unprocessed takes are not needed any more (they are read again from storage if wanted)
-      g.takes.forEach(t => raw.delete(t.k));
+      g.takes.forEach(t => raw.delete(t.k)); (g.patches || []).forEach(p => raw.delete(p.k));
       [...done.keys()].filter(k => k.startsWith(P.id + ':' + (g.id || '') + '[')).forEach(k => done.delete(k));
       if (!opts.noCache) done.set(key, out);
       return out;
@@ -861,9 +925,16 @@ const GuideStore = (function () {
     /* the room's noise, measured by the level check (kept on this computer) */
     async saveProfile(p) { this.profileStamp = Date.now(); done.clear(); return tx('readwrite', st => st.put({ sr: p.sr, bins: Array.from(p.bins), at: Date.now() }, 'noise-profile')); },
     async profile() { const p = await tx('readonly', st => st.get('noise-profile')); return p && p.bins ? { sr: p.sr, bins: Float32Array.from(p.bins), at: p.at } : null; },
-    invalidate() { done.clear(); }
+    invalidate() { done.clear(); pk.clear(); }
   };
 })();
+/* every recording a song still points to (takes, re-recorded parts, loops): the rest can be removed (GuideStore.purge) */
+function projectAudioKeys(P) {
+  const keys = [], add = T => { if (!T) return; (T.takes || []).forEach(t => keys.push(t.k)); (T.patches || []).forEach(p => keys.push(p.k)); };
+  add(P.guide); (P.tracks || []).forEach(add);
+  (P.loops || []).forEach(L => { if (L && L.kind !== 'midi') keys.push(loopKey(P, L)); });
+  return keys;
+}
 
 /* ---- recording from the microphone, sample-exact on the audio clock ----
    Music settings: echo cancellation, noise suppression and automatic gain are OFF. (Echo cancellation treats
@@ -881,36 +952,95 @@ function guideNormalize(pcm) {
 async function listMics() {
   try { const d = await navigator.mediaDevices.enumerateDevices(); return d.filter(x => x.kind === 'audioinput'); } catch (e) { return []; }
 }
-function micConstraints(deviceId) {
-  const a = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1, sampleRate: { ideal: 48000 }, sampleSize: { ideal: 24 } };
+function micConstraints(deviceId, stereo) {
+  // a stereo request lets us pick input 1 or input 2 of an audio interface ourselves
+  const a = { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: stereo ? { ideal: 2 } : 1, sampleRate: { ideal: 48000 }, sampleSize: { ideal: 24 }, latency: { ideal: 0.01 } };
   if (deviceId) a.deviceId = { exact: deviceId };
   return { audio: a };
 }
-async function openMic(deviceId) {
-  try { return await navigator.mediaDevices.getUserMedia(micConstraints(deviceId)); }
-  catch (e) { if (deviceId) return navigator.mediaDevices.getUserMedia(micConstraints(null)); throw e; }   // the chosen microphone was unplugged: use the default one
+async function openMic(deviceId, stereo) {
+  try { return await navigator.mediaDevices.getUserMedia(micConstraints(deviceId, stereo)); }
+  catch (e) { if (deviceId) return navigator.mediaDevices.getUserMedia(micConstraints(null, stereo)); throw e; }   // the chosen microphone was unplugged: use the default one
 }
+/* which input of the device is used: auto (what the device gives), 1, 2, or both mixed. An audio interface with two
+   inputs can then be used with the microphone in either socket. */
+const MIC_CHANNELS = { auto: 'Automatic (recommended)', '1': 'Input 1 (left)', '2': 'Input 2 (right)', mix: 'Both inputs mixed' };
+const micChannel = () => (MIC_CHANNELS[S.prefs.micChannel] ? S.prefs.micChannel : 'auto');
 const MIC_HELP = 'Check that the microphone is plugged in and chosen above, and in Windows: Settings > Privacy & security > Microphone, turn on "Let desktop apps access your microphone". Also check Settings > System > Sound > Input that the right microphone is selected and its volume is up.';
-/* the microphone's delay (seconds): measured by Line up the timing, else the keyboard timing calibration */
-const micLat = () => (S.prefs.micLatencyMs !== undefined ? S.prefs.micLatencyMs : (S.prefs.latencyMs || 0)) / 1000;
+/* the microphone's delay (seconds) for this microphone and these headphones or speakers: measured by Line up the timing
+   (kept for each pair, so an audio interface has its own number), else the last measurement, else the keyboard timing */
+const micPair = deviceId => (deviceId || 'default') + '>' + (S.prefs.outId || 'default');
+function micLatInfo(deviceId) {
+  const by = S.prefs.micLatencyById && S.prefs.micLatencyById[micPair(deviceId)];
+  if (by !== undefined) return { ms: by, measured: true, own: true };
+  if (S.prefs.micLatencyMs !== undefined) return { ms: S.prefs.micLatencyMs, measured: true, own: false };
+  return { ms: S.prefs.latencyMs || 0, measured: false, own: false };
+}
+const micLat = deviceId => micLatInfo(deviceId).ms / 1000;
 /* capture: calls onBlock(Float32Array, timeOnAudioClock) for each block; optional live monitor chain */
 async function captureMic(deviceId, onBlock, opts) {
   opts = opts || {};
-  const stream = await openMic(deviceId), c = Snd.ensure(), sr = c.sampleRate;
-  const src = c.createMediaStreamSource(stream), node = c.createScriptProcessor(2048, 1, 1);
-  node.onaudioprocess = e => { const d = new Float32Array(e.inputBuffer.getChannelData(0)); onBlock(d, e.playbackTime - e.inputBuffer.length / sr); e.outputBuffer.getChannelData(0).fill(0); };
+  const mode = opts.channel || micChannel(), stereo = mode !== 'auto';
+  const stream = await openMic(deviceId, stereo), c = Snd.ensure(), sr = c.sampleRate;
+  const src = c.createMediaStreamSource(stream), node = c.createScriptProcessor(2048, stereo ? 2 : 1, 1);
+  node.onaudioprocess = e => {
+    const nCh = e.inputBuffer.numberOfChannels; let d;
+    if (mode === 'mix' && nCh > 1) { const L = e.inputBuffer.getChannelData(0), R = e.inputBuffer.getChannelData(1); d = new Float32Array(L.length); for (let i = 0; i < d.length; i++) d[i] = (L[i] + R[i]) / 2; }
+    else d = new Float32Array(e.inputBuffer.getChannelData(mode === '2' ? Math.min(1, nCh - 1) : 0));
+    onBlock(d, e.playbackTime - e.inputBuffer.length / sr); e.outputBuffer.getChannelData(0).fill(0);
+  };
   const silent = c.createGain(); silent.gain.value = 0; src.connect(node); node.connect(silent); silent.connect(c.destination);
   let mon = null;
   if (opts.monitor) { mon = VocalFX.liveChain(c, opts.monitor); src.connect(mon.input); mon.output.connect(Snd.dryBus()); }
+  const track = stream.getAudioTracks()[0] || {}, st = track.getSettings ? track.getSettings() : {};
   return {
-    sr, label: (stream.getAudioTracks()[0] || {}).label || '',
+    sr, label: track.label || '', settings: { sampleRate: st.sampleRate || sr, channels: st.channelCount || 1, deviceId: st.deviceId || '' },
     stop() { try { node.disconnect(); src.disconnect(); if (mon) mon.output.disconnect(); } catch (e) { /* ignore */ } stream.getTracks().forEach(t => t.stop()); }
   };
 }
+/* the song from a beat onward (for punch-in and "hear this part"): events and clips move earlier by `from` beats; a
+   note or clip that is already sounding at that moment carries on from there. `to` (a beat) ends it early. */
+function scriptFrom(script, from, to) {
+  const spb = 60 / script.bpm, end = to === undefined ? script.total : Math.min(script.total, to), out = Object.assign({}, script);
+  out.events = script.events.filter(e => e.t < end && (e.t >= from || e.t + (e.d || 0) > from)).map(e => {
+    const o = Object.assign({}, e), t = Math.max(e.t, from); o.t = t - from;
+    if (e.d !== undefined) o.d = Math.max(0.01, Math.min(e.t + e.d, end) - t);
+    return o;
+  });
+  out.audio = (script.audio || []).map(a => {
+    let at = a.at - from, offset = a.offset || 0, dur = a.dur;
+    if (at < 0) { offset += -at * spb; dur += at; at = 0; }
+    if (at + dur > end - from) dur = end - from - at;
+    return Object.assign({}, a, { at, offset, dur });
+  }).filter(a => a.dur > 0.01);
+  out.total = Math.max(0.5, end - from);
+  out.fade = script.fade && to === undefined ? { from: script.fade.from - from, to: script.fade.to - from } : null;
+  return out;
+}
+/* take the part a..b (seconds) out of a list of ranges: [{a,b}] */
+function subtractRange(list, a, b) {
+  const out = []; list.forEach(r => { if (r.b <= a || r.a >= b) { out.push(r); return; } if (r.a < a) out.push(Object.assign({}, r, { b: a })); if (r.b > b) out.push(Object.assign({}, r, { a: b })); });
+  return out;
+}
+/* add a range to a list, joining ranges that touch or overlap */
+function addRange(list, a, b) {
+  const all = list.concat([{ a, b }]).sort((x, y) => x.a - y.a), out = [];
+  all.forEach(r => { const l = out[out.length - 1]; if (l && r.a <= l.b + 0.001) l.b = Math.max(l.b, r.b); else out.push({ a: r.a, b: r.b }); });
+  return out;
+}
+const MAX_PATCHES = 24;
+const nextTakeNumber = g => Math.max(0, ...g.takes.map(t => t.n || 0), ...(g.patches || []).map(p => p.n || 0)) + 1;
+/* is there room on this computer for another recording? (MB free, or null when the system does not say) */
+async function storageRoomMB() {
+  try { if (navigator.storage && navigator.storage.estimate) { const e = await navigator.storage.estimate(); if (e && e.quota) return Math.round((e.quota - (e.usage || 0)) / 1048576); } } catch (e) { /* unknown */ }
+  return null;
+}
+/* ask the system to keep the recordings (it may otherwise clear them when the disk is nearly full) */
+function keepStorage() { try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); } catch (e) { /* ignore */ } }
 function startGuideRecording(P, onState, opts) {
   opts = opts || {};
-  const target = opts.trackId ? trackOf(P, opts.trackId) : null;
-  let cap = null, chunks = [], firstAt = null, songStart = null, handle = null, stopped = false, sr = 48000, maxPeak = 0;
+  const target = opts.trackId ? trackOf(P, opts.trackId) : null, punch = opts.punch || null;
+  let cap = null, chunks = [], firstAt = null, songStart = null, handle = null, stopped = false, sr = 48000, maxPeak = 0, fromBeat = 0;
   const finish = async () => {
     if (stopped) return; stopped = true;
     if (cap) cap.stop();
@@ -918,25 +1048,47 @@ function startGuideRecording(P, onState, opts) {
     if (!chunks.length || songStart === null) { onState({ state: 'empty' }); return; }
     if (maxPeak < GUIDE_SILENT) { onState({ state: 'silent', msg: 'The microphone did not pick up any sound, so nothing was saved' + ((target ? target.takes.length : P.guide) ? ' (your earlier takes are kept)' : '') + '. ' + MIC_HELP }); return; }
     const total = chunks.reduce((a, c) => a + c.length, 0), all = new Float32Array(total); let o = 0; chunks.forEach(c => { all.set(c, o); o += c.length; });
-    const shift = Math.round((songStart - firstAt + micLat()) * sr);
+    const shift = Math.round((songStart - firstAt + micLat(opts.deviceId)) * sr);
     let pcm;
     if (shift >= 0) pcm = all.slice(Math.min(shift, all.length));
     else { pcm = new Float32Array(all.length - shift); pcm.set(all, -shift); }   // the microphone started late: pad the start with silence
+    const g = target || guideOf(P) || { at: Date.now(), dur: 0, gain: 1, nudgeMs: 0, takes: [], main: 0, comp: {}, fx: { preset: 'worship', nr: 'preset' } };
+    normTrack(g);
+    if (punch) {
+      // punch-in: only the chosen part is kept; it is stored as a patch that is put over the take (the take is not changed)
+      if (!g.takes.length) { onState({ state: 'error', msg: 'There is no recording to fix yet.' }); return; }
+      const spb = 60 / P.bpm, startSec = fromBeat * spb, nudge = (g.nudgeMs || 0) / 1000, m = 0.02;
+      const s0 = Math.max(0, Math.round((punch.a + nudge - m - startSec) * sr)), s1 = Math.min(pcm.length, Math.round((punch.b + nudge + m - startSec) * sr));
+      if (s1 - s0 < sr * 0.05) { onState({ state: 'empty' }); return; }
+      const clip = pcm.slice(s0, s1), t0 = s0 / sr + startSec - nudge;
+      const base = await GuideStore.editedPcm(P, g).catch(() => null), gain = base ? VocalFX.matchGain(base.pcm, clip, sr, punch.a, punch.b) : 1, pk = guidePeak(clip) * gain;
+      const k2 = gain * (pk > 0.98 ? 0.98 / pk : 1); for (let i = 0; i < clip.length; i++) clip[i] *= k2;
+      const num = nextTakeNumber(g), key = takePrefix(P, g) + ':' + num;
+      await GuideStore.put(key, new Blob([encodeWav({ length: clip.length, sampleRate: sr, numberOfChannels: 1, getChannelData: () => clip }, 24)], { type: 'audio/wav' }));
+      g.mutes = subtractRange(g.mutes, punch.a, punch.b);   // a part that was silenced is sung again: it is no longer silent
+      g.patches.push({ k: key, n: num, a: punch.a, b: punch.b, t0, fade: m });
+      if (!target) P.guide = g;
+      P.recAt = Date.now(); GuideStore.invalidate(); touch();
+      onState({ state: 'saved', punch: true, seconds: Math.round((punch.b - punch.a) * 10) / 10, take: num });
+      return;
+    }
     const n = guideNormalize(pcm);
     const tmp = { length: pcm.length, sampleRate: sr, numberOfChannels: 1, getChannelData: () => pcm };
     const blob = new Blob([encodeWav(tmp, 24)], { type: 'audio/wav' });
     // the take is stored first; the project only points to it once it is safely saved
-    const g = target || guideOf(P) || { at: Date.now(), dur: 0, gain: 1, nudgeMs: 0, takes: [], main: 0, comp: {}, fx: { preset: 'worship', nr: 'preset' } };
-    const num = (g.takes.reduce((a, t) => Math.max(a, t.n || 0), 0) || 0) + 1, k = takePrefix(P, g) + ':' + num;
+    const num = nextTakeNumber(g), k = takePrefix(P, g) + ':' + num;
     await GuideStore.put(k, blob);
     if (!target) P.guide = g;
     g.takes.push({ k, at: Date.now(), dur: Math.round(pcm.length / sr), n: num });
-    while (g.takes.length > MAX_TAKES) { const old = g.takes.shift(); GuideStore.del(old.k).catch(() => {}); g.comp = {}; }
+    while (g.takes.length > MAX_TAKES) { const old = g.takes.shift(); GuideStore.del(old.k).catch(() => {}); g.comp = {}; }   // the oldest take goes
+    // a new full take starts clean: the parts silenced or sung again on the old take are put away (Undo brings them back)
+    const cleared = (g.mutes || []).length + (g.patches || []).length; g.mutes = []; g.patches = [];
     g.main = g.takes.length - 1; g.at = Date.now(); g.dur = Math.round(pcm.length / sr);
-    GuideStore.invalidate(); touch();
-    onState({ state: 'saved', seconds: g.dur, quiet: n.peak < 0.05, boost: n.gain, take: num });
+    P.recAt = Date.now(); GuideStore.invalidate(); touch();
+    onState({ state: 'saved', seconds: g.dur, quiet: n.peak < 0.05, boost: n.gain, take: num, cleared });
   };
   (async () => {
+    keepStorage();
     try {
       cap = await captureMic(opts.deviceId, (d, at) => {
         if (stopped) return;
@@ -944,15 +1096,22 @@ function startGuideRecording(P, onState, opts) {
         chunks.push(d);
         const pk = guidePeak(d); if (pk > maxPeak) maxPeak = pk;
         onState({ state: 'level', peak: pk });
-      }, { monitor: opts.monitor });
+      }, { monitor: opts.monitor, channel: opts.channel });
     } catch (e) { stopped = true; onState({ state: 'error', msg: 'The microphone could not be opened. ' + MIC_HELP }); return; }
     sr = cap.sr;
     const A = arrangeSong(P, { melInst: Snd.inst() });
     // overdubbing: the loops and the tracks already recorded play along (all but the one being recorded)
     A.script.audio = (await loopAudio(P, A.places).catch(() => [])).concat(await recordedAudio(P, { exclude: target || guideOf(P), live: true }).catch(() => []));
     if (stopped) return;
-    onState({ state: 'recording', label: cap.label });
-    handle = Snd.play(A.script, { force: true, inst: () => Snd.backingInst(), onStart: t => { songStart = t; }, onEnd: () => finish() });
+    let script = A.script;
+    if (punch) {
+      // start a bar or two before the part (so the singer hears the groove come in), stop just after it
+      const spb = 60 / P.bpm, nudge = ((target || guideOf(P) || {}).nudgeMs || 0) / 1000, bar = METERS[P.ts].bar;
+      fromBeat = Math.max(0, Math.floor((punch.a + nudge) / spb / bar) * bar - bar);
+      script = scriptFrom(A.script, fromBeat, (punch.b + nudge + 0.4) / spb);
+    }
+    onState({ state: 'recording', label: cap.label, settings: cap.settings, punch: !!punch });
+    handle = Snd.play(script, { force: true, inst: () => Snd.backingInst(), onStart: t => { songStart = t; onState({ state: 'started', start: t, fromBeat }); }, onEnd: () => finish() });
   })();
   return { stop: finish };
 }
@@ -1009,7 +1168,9 @@ function calibrateMic(deviceId, mode, onState) {
       const r = VocalFX.clickLatency(pcm, cap.sr, t0, clicks, mode === 'clap' ? { min: -0.25, max: 0.4 } : {});
       if (!r) { onState({ state: 'unheard' }); return; }
       if (mode !== 'clap' && r.spread > 0.004) { onState({ state: 'unsteady' }); return; }
-      S.prefs.micLatencyMs = Math.round(r.latency * 1000); touch();
+      S.prefs.micLatencyMs = Math.round(r.latency * 1000);
+      S.prefs.micLatencyById = S.prefs.micLatencyById || {}; S.prefs.micLatencyById[micPair(deviceId)] = S.prefs.micLatencyMs;   // each microphone and speakers pair keeps its own number
+      touch();
       onState({ state: 'done', ms: S.prefs.micLatencyMs, heard: r.heard, mode });
     }, (0.6 + count * gap + 0.8) * 1000);
   })();
@@ -1017,14 +1178,13 @@ function calibrateMic(deviceId, mode, onState) {
 }
 /* a short microphone check: shows the level for a few seconds, records nothing */
 function testMic(deviceId, onLevel, ms) {
-  let stream = null, raf = null, ctxN = null, done = false, peakAll = 0;
-  const stop = () => { if (done) return; done = true; cancelAnimationFrame(raf); try { if (ctxN) ctxN.disconnect(); } catch (e) { /* ignore */ } if (stream) stream.getTracks().forEach(t => t.stop()); onLevel(null, peakAll); };
+  let cap = null, done = false, peakAll = 0, timer = null;
+  const stop = () => { if (done) return; done = true; clearTimeout(timer); if (cap) cap.stop(); onLevel(null, peakAll); };
   (async () => {
-    try { stream = await openMic(deviceId); } catch (e) { done = true; onLevel(-1, 0); return; }
-    const c = Snd.ensure(); const an = c.createAnalyser(); an.fftSize = 2048; ctxN = c.createMediaStreamSource(stream); ctxN.connect(an);
-    const buf = new Float32Array(an.fftSize), t0 = performance.now();
-    const loop = () => { if (done) return; an.getFloatTimeDomainData(buf); const p = guidePeak(buf); if (p > peakAll) peakAll = p; onLevel(p, peakAll); if (performance.now() - t0 > (ms || 5000)) stop(); else raf = requestAnimationFrame(loop); };
-    loop();
+    try { cap = await captureMic(deviceId, d => { if (done) return; const p = guidePeak(d); if (p > peakAll) peakAll = p; onLevel(p, peakAll); }); }
+    catch (e) { done = true; onLevel(-1, 0); return; }
+    if (done) { cap.stop(); return; }
+    timer = setTimeout(stop, ms || 5000);
   })();
   return { stop };
 }

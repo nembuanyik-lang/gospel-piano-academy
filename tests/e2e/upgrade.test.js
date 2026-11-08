@@ -1,3 +1,4 @@
+const T = require('./tabs').auto;
 // Upgrading: backups made by earlier versions (2.0 one-progression songs, 2.7 sections and a guide track kept under
 // the song id, older prefs) restored through Profile > Your data, then every song opened, played and exported. And a
 // round trip: a 2.9 backup with all the new song fields comes back exactly.
@@ -14,7 +15,7 @@ test.before(async () => { srv = serve(path.join(__dirname, '..', '..', 'app'), P
 test.after(async () => { await browser.close(); srv.close(); });
 async function open() {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
-  const page = await ctx.newPage(), errors = [];
+  const page = T(await ctx.newPage()), errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
   await page.goto('http://localhost:' + PORT + '/');
@@ -86,7 +87,7 @@ test('a 2.9 backup with the new song fields comes back exactly', async () => {
     Object.assign(P, { title: 'New song', ending: 'ritard', master: { target: 'loud' }, info: { writers: 'Minister Kemamah', year: '2026', ccli: '1234567' }, choir: { on: true },
       mixer: { chords: { v: 0.7, pan: -0.2, mute: false, solo: false }, drums: { v: 1, pan: 0, mute: true, solo: false } }, words: { Chorus: 'Ho-ly' } });
     P.sections.Chorus.chords = [{ r: 5, q: 'major', b: 7, beats: 4, push: true }, { r: 4, q: '7#9', b: null, beats: 2, push: false }];
-    P.form = [{ s: 'Chorus', x: 2, up: 2, tag: 1, stop: true, fill: true, swell: true, en: 'full', vamp: false, lead: true }]; P.structure = ['Chorus'];
+    P.form = [{ s: 'Chorus', x: 2, up: 2, tag: 1, stop: true, fill: true, fk: '', swell: true, en: 'full', vamp: false, lead: true }]; P.structure = ['Chorus'];
     P.tracks = [{ id: 'abc1', name: 'Alto', kind: 'vocal', takes: [{ k: P.id + ':tabc1:1', at: 1, dur: 30, n: 1 }], main: 0, comp: { 0: 0 }, fx: { preset: 'choir', nr: 'light', reverb: true }, gain: 0.8, pan: -0.4, mute: false, solo: false, nudgeMs: 10 }];
     P.loops = [{ id: 'lab1', name: 'Keys', kind: 'loop', role: 'music', bpm: 92, beats: 8, dur: 5, tr: 3, gain: 0.9, mute: false, secs: ['Chorus'], offset: 0, keyPc: 7, minor: false }];
     window.__gpa.S().gear = { level: 3, total: 40, correct: 33, best: 3, hist: [1, 0, 1], last: '2026-11-07' }; window.__gpa.S().licks = { tt251: { bpm: 64, keys: ['C', 'F'], best: 100, n: 5 } };

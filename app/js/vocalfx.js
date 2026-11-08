@@ -226,6 +226,53 @@ const VocalFX = (() => {
     return out;
   }
 
+  /* ---- editing a take without changing it: parts re-recorded (punch-in) and parts silenced ----
+     patches: [{ a, b, t0, fade, pcm }]  a..b seconds is taken from `pcm`, whose first sample is at t0 seconds
+     mutes:   [{ a, b }]                 a..b seconds is made silent
+     Every edge is smoothed over `fade` seconds (15 ms) so nothing clicks. The input is never changed. */
+  function applyEdits(pcm, sr, o) {
+    o = o || {};
+    const patches = (o.patches || []).filter(p => p && p.pcm && p.b > p.a), mutes = (o.mutes || []).filter(m => m && m.b > m.a);
+    if (!patches.length && !mutes.length) return pcm;
+    let n = pcm.length; patches.forEach(p => { n = Math.max(n, Math.round(p.b * sr)); });
+    const out = new Float32Array(n); out.set(pcm);
+    patches.forEach(p => {
+      const A = Math.max(0, Math.round(p.a * sr)), B = Math.round(p.b * sr), F = Math.max(1, Math.round((p.fade || 0.015) * sr)), s0 = Math.round(p.t0 * sr);
+      const from = Math.max(0, A - F), to = Math.min(n, B + F);
+      for (let j = from; j < to; j++) {
+        let w = 1; if (j < A) w = (j - from) / F; else if (j >= B) w = 1 - (j - B) / F;   // 0..1 across each edge
+        const q = j - s0, c = q >= 0 && q < p.pcm.length ? p.pcm[q] : 0;
+        out[j] = out[j] * Math.cos(w * Math.PI / 2) + c * Math.sin(w * Math.PI / 2);
+      }
+    });
+    mutes.forEach(m => {
+      const A = Math.max(0, Math.round(m.a * sr)), B = Math.min(n, Math.round(m.b * sr)), F = Math.max(1, Math.round((m.fade || 0.015) * sr));
+      for (let j = Math.max(0, A - F); j < A; j++) out[j] *= 0.5 + 0.5 * Math.cos(Math.PI * (j - (A - F)) / F);
+      for (let j = A; j < B; j++) out[j] = 0;
+      for (let j = B; j < Math.min(n, B + F); j++) out[j] *= 0.5 - 0.5 * Math.cos(Math.PI * (j - B) / F);
+    });
+    return out;
+  }
+  /* a picture of the sound for drawing: [min, max] pairs, `perSec` pairs for every second */
+  function peaks(pcm, sr, perSec) {
+    perSec = perSec || 100;
+    const n = Math.max(1, Math.ceil(pcm.length / sr * perSec)), out = new Float32Array(n * 2), per = sr / perSec;
+    for (let i = 0; i < n; i++) {
+      const a = Math.floor(i * per), b = Math.min(pcm.length, Math.floor((i + 1) * per)); let lo = 0, hi = 0;
+      for (let j = a; j < b; j++) { const v = pcm[j]; if (v < lo) lo = v; if (v > hi) hi = v; }
+      out[i * 2] = lo; out[i * 2 + 1] = hi;
+    }
+    return out;
+  }
+  /* a punched-in clip should sit at the same level as the take around it: gain that matches the loudness (RMS) of
+     `base` between a and b, kept between 0.25x and 4x; when there is nothing there to match, bring the clip's peak to 0.7 */
+  function matchGain(base, clip, sr, a, b) {
+    const A = Math.max(0, Math.round(a * sr)), B = Math.min(base.length, Math.round(b * sr)), br = B > A ? rmsOf(base.subarray(A, B)) : 0, cr = rmsOf(clip);
+    if (cr < 1e-6) return 1;
+    if (br > 1e-3) return Math.max(0.25, Math.min(4, br / cr));
+    const pk = peakOf(clip); return pk > 1e-6 ? Math.min(12, 0.7 / pk) : 1;
+  }
+
   /* ---- in the browser: the reverb, and the live chain for hearing yourself while recording ---- */
   async function withRoom(y, sr, presetId) {
     const p = PRESETS[presetId];
@@ -295,6 +342,6 @@ const VocalFX = (() => {
   }
 
   return { chainAsync, masterAsync, PRESETS, NR_LEVELS, biquad, highpass, fft, noiseProfile, denoise, compress, deess, limit, normalize, chain, peakOf, rmsOf, dB, fromDb,
-    levelAdvice, measure, clickLatency, comp, withRoom, liveChain, N };
+    levelAdvice, measure, clickLatency, comp, applyEdits, peaks, matchGain, withRoom, liveChain, N };
 })();
 if (typeof module !== 'undefined') module.exports = VocalFX;

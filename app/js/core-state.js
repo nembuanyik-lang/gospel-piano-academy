@@ -17,7 +17,7 @@ function defaults() {
     profile: { name: '', goals: [], onboarded: false, diag: null },
     lessons: {}, cats: {}, xp: 0,
     practice: { total: 0, days: {} },
-    ear: {}, ach: {}, songs: [],
+    ear: {}, ach: {}, songs: [], learn: [], progs: [],
     prefs: { names: true, sound: true, speed: 'normal', dailyMin: 10 },
     testouts: {}, scores: [], today: { date: '', items: {}, goalMet: false },
     sprint: { note: 0, chord: 0 }, recommend: {}, events: {},
@@ -50,7 +50,7 @@ function loadLocal() {
 let S = loadLocal();
 App.S = () => S;
 let saveTimer = null;
-function touch() { S.updated = Date.now(); clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 500); }
+function touch() { S.updated = Date.now(); try { if (typeof SongHistory !== 'undefined') SongHistory.note(); } catch (e) { /* undo history is optional */ } clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 500); }
 
 /* Saving. On the desktop every save goes to two places: this window's local storage and a file in the
    app's data folder (written atomically by the main process, with daily snapshots). If a save fails the

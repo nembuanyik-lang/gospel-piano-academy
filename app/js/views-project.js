@@ -4,7 +4,7 @@
    recorded in sync, and exports (MIDI, chord chart, audio). The arrangement itself is in studio.js. */
 /* the track shown in the recording studio card: '' = the guide (Lead vocal), or an extra track's id */
 const curTrack = P => trackOf(P, pst().trk || '') || (pst().trk ? (pst().trk = '', guideOf(P)) : null);
-const pst = () => ui.proj || (ui.proj = { sec: 'Chorus', sel: -1, ci: -1, take: null, withGuide: true });
+const pst = () => ui.proj || (ui.proj = { sec: 'Chorus', sel: -1, ci: -1, take: null, withGuide: true, tab: 'write' });
 const fmtTime = s => Math.floor(s / 60) + ':' + String(Math.round(s % 60)).padStart(2, '0');
 const songSeconds = P => Math.round(arrangeSong(P).total * 60 / P.bpm);
 
@@ -25,7 +25,11 @@ function arrangeCard(P) {
     '<label class="field"><span>Keyboard rhythm</span>' + selectHtml('pstyle', Object.keys(E.STYLES).map(k => [k, E.STYLES[k].label]), P.style, 'pstyle') + '</label>' +
     '<label class="field"><span>Bass</span>' + selectHtml('pbass', Object.keys(BASS_STYLES).map(k => [k, BASS_STYLES[k]]), P.bassStyle, 'pbass') + '</label>' +
     '<label class="field"><span>Drums</span>' + selectHtml('pbeat', beatOpts, beatVal, 'pbeat') + '</label>' +
-    (P.ts === 4 ? '<label class="field"><span>Swing</span><input type="range" min="0" max="60" value="' + (P.swing || 0) + '" data-bind="pswing" aria-label="Swing"></label>' : '') + '</div>' +
+    (P.ts === 4 ? '<label class="field"><span>Swing</span><input type="range" min="0" max="60" value="' + (P.swing || 0) + '" data-bind="pswing" aria-label="Swing"></label>' : '') +
+    '<label class="field"><span>Drummer\'s feel</span>' + selectHtml('phuman', [['0', 'Exact (like a machine)'], ['1', 'Light human feel'], ['2', 'Loose human feel']], String(P.human || 0), 'phuman') + '</label></div>' +
+    '<div class="row wrap"><button class="btn ghost sm" type="button" data-act="pdrumreal">' + icon('plus') + 'Use a real drum recording…</button>' +
+    (P.beatWas ? '<button class="btn ghost sm" type="button" data-act="pdrumback">Go back to the built-in drums (' + esc((E.BEATS[P.beatWas] || {}).label || P.beatWas) + ')</button>' : '') +
+    '<span class="tiny">A drum loop or a whole drum beat, WAV or MP3: it follows the song\'s tempo and replaces the built-in drums.</span></div>' +
     soundPicker() +
     '<p class="tiny">Sections play with their own energy: the intro and outro are gentle, the chorus is fullest.</p></section>';
 }
@@ -75,6 +79,34 @@ function chordChip(P, c, act, extra) {
   const d = Songcraft.describe(P.key, c);
   return '<button type="button" class="chip-btn" data-act="' + act + '" data-r="' + c.r + '" data-q="' + esc(c.q) + '" data-b="' + (c.b === null || c.b === undefined ? '' : c.b) + '"' + (c.hint || c.why ? ' title="' + esc(c.hint || c.why) + '"' : '') + (extra || '') + '><b class="mono">' + esc(d.name) + '</b><span>' + esc(d.number) + '</span></button>';
 }
+/* the chords to choose from, in the flavour you pick: plain, 7th, 9th, add9, sus, 6th or the gospel colours */
+const CHORD_FLAVOURS = [
+  ['plain', 'Plain', ['major', 'minor', 'minor', 'major', 'major', 'minor', 'dim'], 'major'],
+  ['seventh', '7th', ['maj7', 'm7', 'm7', 'maj7', '7', 'm7', 'm7b5'], '7'],
+  ['ninth', '9th', ['maj9', 'm9', 'm7', 'maj9', '9', 'm9', 'm7b5'], '9'],
+  ['add9', 'Add9', ['add9', 'madd9', 'madd9', 'add9', 'add9', 'madd9', 'dim'], 'add9'],
+  ['sus4', 'Sus4', ['sus4', 'sus4', 'sus4', 'sus4', 'sus4', 'sus4', 'sus4'], 'sus4'],
+  ['sus2', 'Sus2', ['sus2', 'sus2', 'sus2', 'sus2', 'sus2', 'sus2', 'sus2'], 'sus2'],
+  ['sixth', '6th', ['6', 'm7', 'm7', '6', '7', 'm6', 'm7b5'], '6'],
+  ['gospel', 'Gospel colour', ['maj9', 'm9', 'm7', 'maj9', '13', 'm9', 'm7b5'], '9']
+];
+function flavourHtml(P) {
+  const id = pst().flav || (P.sev ? 'seventh' : 'plain'), F = CHORD_FLAVOURS.find(f => f[0] === id) || CHORD_FLAVOURS[0];
+  const dia = Songcraft.SCALE.map((r, i) => ({ r, q: F[2][i], b: null, hint: '' })), others = Array.from({ length: 12 }, (_, r) => r).filter(r => !Songcraft.SCALE.includes(r)).map(r => ({ r, q: F[3], b: null, hint: 'Not in the key: a colour chord' }));
+  return '<div class="field"><span>Chord flavour</span><div class="chips">' + CHORD_FLAVOURS.map(f => '<button type="button" class="chip-btn' + (f[0] === F[0] ? ' on' : '') + '" aria-pressed="' + (f[0] === F[0]) + '" data-act="pflav" data-f="' + f[0] + '">' + esc(f[1]) + '</button>').join('') + '</div></div>' +
+    '<div class="field"><span>In the key of ' + esc(fmt(P.key)) + ' (' + esc(F[1].toLowerCase()) + ')</span><div class="chips">' + dia.map(c => chordChip(P, c, 'pcadd')).join('') + '</div></div>' +
+    '<details class="colours"><summary>Other notes (colour chords outside the key)</summary><div class="chips">' + others.map(c => chordChip(P, c, 'pcadd')).join('') + '</div></details>';
+}
+/* progressions you keep: saved as steps from the key, so they fit any song in any key */
+function progsHtml(P) {
+  const list = S.progs || [], cur = P.sections[pst().sec].chords;
+  return '<details class="colours" id="progcard"' + (pst().progsOpen ? ' open' : '') + '><summary>My saved progressions (' + list.length + ')</summary>' +
+    '<div class="row wrap"><label class="field"><span>Name for this ' + esc(pst().sec.toLowerCase()) + '\'s chords</span><input type="text" maxlength="60" id="progname" value="' + esc(pst().progName || '') + '" data-bind="pprogname" placeholder="e.g. Sunday opening"></label>' +
+    '<button class="btn ghost sm" type="button" data-act="psaveprog"' + (cur.length ? '' : ' disabled') + '>Save these ' + cur.length + ' chords</button></div>' +
+    (list.length ? '<ul class="lessons">' + list.map(x => '<li class="lrow"><div class="lmain"><b>' + esc(x.name) + '</b><span class="tiny">' + esc(x.chords.map(c => Songcraft.describe(P.key, c).name).join('  ')) + '</span></div>' +
+      '<span class="row wrap"><button class="btn ghost sm" type="button" data-act="pprogreplace" data-id="' + esc(x.fid) + '">Use (replace)</button><button class="btn ghost sm" type="button" data-act="pprogadd" data-id="' + esc(x.fid) + '">Add to the end</button><button class="btn ghost sm" type="button" data-act="pprogdel" data-id="' + esc(x.fid) + '" aria-label="Delete ' + esc(x.name) + '">' + icon('x') + '</button></span></li>').join('') + '</ul>'
+      : '<p class="tiny muted">Nothing saved yet. Build a set of chords you like, give it a name and save it: it is shown here in the key of any song you open.</p>') + '</details>';
+}
 function chordsCard(P) {
   const st = P.steps, sec = pst().sec, s = P.sections[sec], sc = sectionChords(P, sec), bar = meterOf(P).bar, ci = pst().ci;
   const others = SECTION_TYPES.filter(t => t !== sec), sel = s.chords[ci];
@@ -102,9 +134,10 @@ function chordsCard(P) {
     '<p class="muted">Any chord you play: sevenths, ninths, thirteenths, slash chords, borrowed and passing chords. Give each chord its own length, and push a chord to make it land early. Up to ' + MAX_SECTION_CHORDS + ' chords per section.</p>' +
     secTabs(P, 'psec') + strip + editor +
     '<p class="tiny"><b>Tap a chord</b> above to change its type, bass note, length or push. New chords go ' + (sel ? 'after the chosen chord' : 'at the end') + '.</p>' +
-    '<div class="field"><span>In the key of ' + esc(fmt(P.key)) + '</span><div class="chips">' + Songcraft.diatonicChords(P.sev).map(c => chordChip(P, c, 'pcadd')).join('') + '</div></div>' +
+    flavourHtml(P) +
     '<label class="switch"><input type="checkbox" data-bind="psev"' + (P.sev ? ' checked' : '') + '><span>Offer the chords of the key as 7th chords</span></label>' +
     '<div class="field"><span>What could come next' + (after ? ' after ' + esc(Songcraft.describe(P.key, after).name) : '') + '</span><div class="chips">' + sugg.map(c => chordChip(P, c, 'pcadd')).join('') + '</div><p class="tiny">' + esc(sugg.slice(0, 3).map(x => Songcraft.describe(P.key, x).name + ': ' + x.why).join(' · ')) + '</p></div>' +
+    progsHtml(P) +
     '<details class="colours"' + (pst().colours ? ' open' : '') + '><summary>Gospel colours: passing chords, borrowed chords, slash chords</summary>' + Songcraft.COLOURS.map(([g, list]) => '<div class="field"><span>' + esc(g) + '</span><div class="chips">' + list.map(c => chordChip(P, c, 'pcadd')).join('') + '</div></div>').join('') + '</details>' +
     '<div class="grid2"><label class="field"><span>Length of new chords</span><select data-bind="pnewlen">' + LEN_CHOICES.map(b => '<option value="' + b + '"' + (b === newLen ? ' selected' : '') + '>' + esc(beatsLabel(b, bar)) + '</option>').join('') + '</select></label>' +
     '<label class="field"><span>Copy chords from</span><select data-bind="pcopy"><option value="">Choose a section…</option>' + others.map(t => '<option value="' + esc(t) + '">' + esc(t) + ' (' + P.sections[t].chords.length + ' chords)</option>').join('') + '</select></label></div>' +
@@ -152,6 +185,7 @@ function formCard(P) {
       '<div class="row wrap"><label class="switch"><input type="checkbox" data-bind="pfvamp" data-i="' + i + '"' + (it.vamp ? ' checked' : '') + '><span>Vamp (repeat until the leader cues)</span></label>' +
       '<label class="switch"><input type="checkbox" data-bind="pfstop" data-i="' + i + '"' + (it.stop ? ' checked' : '') + '><span>Band stops on the last bar</span></label>' +
       '<label class="switch"><input type="checkbox" data-bind="pffill" data-i="' + i + '"' + (it.fill ? ' checked' : '') + '><span>Drum fill at the end (and a crash into the next part)</span></label>' +
+      (it.fill ? '<label class="field"><span>Kind of fill</span><select data-bind="pffk" data-i="' + i + '"><option value="">The usual fill for this part</option>' + Object.keys(FILL_KINDS).map(k => '<option value="' + k + '"' + (it.fk === k ? ' selected' : '') + '>' + esc(FILL_KINDS[k]) + '</option>').join('') + '</select></label>' : '') +
       '<label class="switch"><input type="checkbox" data-bind="pfswell" data-i="' + i + '"' + (it.swell ? ' checked' : '') + '><span>Swell into the next part</span></label>' +
       (it.up !== (i ? form[i - 1].up : 0) ? '<label class="switch"><input type="checkbox" data-bind="pflead" data-i="' + i + '"' + (it.lead ? ' checked' : '') + '><span>Lead into the new key with its V7</span></label>' : '') + '</div></li>';
   };
@@ -184,13 +218,22 @@ function guideCard(P) {
     (tid ? '<div class="grid3"><label class="field"><span>Track name</span><input type="text" maxlength="40" value="' + esc(cur.name) + '" data-bind="ptrkname"></label><label class="field"><span>Kind</span><select data-bind="ptrkkind">' + Object.keys(TRACK_KINDS).map(k => '<option value="' + k + '"' + (k === cur.kind ? ' selected' : '') + '>' + TRACK_KINDS[k] + '</option>').join('') + '</select></label><div class="field"><span>&nbsp;</span><button class="btn ghost sm" type="button" data-act="ptrkdel">Remove this track</button></div></div>' : '') +
     '<div class="grid2"><label class="field"><span>Microphone</span><select id="guidemic" data-bind="pmic"><option value="">Windows default microphone</option></select></label>' +
     '<div class="field"><span>Level</span><div class="miclevel" aria-hidden="true"><i id="guidelvl"></i></div></div></div>' +
+    '<div class="grid2"><label class="field"><span>Input (for an audio interface with more than one socket)</span><select data-bind="pchan">' + Object.keys(MIC_CHANNELS).map(k => '<option value="' + k + '"' + (k === micChannel() ? ' selected' : '') + '>' + esc(MIC_CHANNELS[k]) + '</option>').join('') + '</select></label>' +
+    '<label class="field"><span>Headphones or speakers (where the song plays)</span><select id="guideout" data-bind="pout"><option value="">Windows default</option></select></label></div>' +
+    '<label class="switch"><input type="checkbox" data-bind="pstage"' + (pst().stage !== false ? ' checked' : '') + '><span>Show the words and chords in big letters while I play or record</span></label>' +
+    '<details class="tiny ifacehelp"><summary>Using an audio interface or a better microphone</summary><ol><li>Plug it in and wait a moment. It appears in the Microphone list above (this list updates by itself).</li>' +
+    '<li>Choose it as the Microphone. Choose its headphone output under Headphones or speakers, so the song and your voice go through it.</li>' +
+    '<li>If you plug the microphone into one socket of the interface, choose Input 1 or Input 2. Leave it on Automatic if you are not sure.</li>' +
+    '<li>Set the gain with the interface\'s own knob, then press Check my level and room.</li>' +
+    '<li>Measure the timing once for that microphone and those headphones: every pair keeps its own number.</li>' +
+    '<li>If the interface can listen to you directly (a Direct Monitor or Mix knob), use that and keep "Hear myself" off here: it is faster and has no delay.</li></ol></details>' +
     // 4. level and room check, 6. timing
     '<div class="studiosteps"><div><b>1. Check your level and room</b><p class="tiny">Stay quiet for 2 seconds, then sing the loudest line of your song for 6 seconds. The app tells you how to set the gain, and learns your room\'s noise for the noise reduction.</p>' +
     '<button class="btn ghost sm" type="button" id="lvlcheck">' + icon('mic') + 'Check my level and room</button>' +
     '<p class="tiny" id="lvlinfo" aria-live="polite">' + (chk ? 'Last check: level ' + esc(chk.level || '') + ' (peak ' + chk.peakDb + ' dB), room ' + chk.noiseDb + ' dB.' : 'Not checked yet.') + '</p></div>' +
     '<div><b>2. Line up the timing</b><p class="tiny">Turn the speakers up and hold the microphone near them: the app plays 8 clicks and measures how late the microphone hears them, so your voice lands exactly on the beat. With headphones on, choose Clap along instead.</p>' +
     '<div class="row wrap"><button class="btn ghost sm" type="button" id="calspk">Measure with the speakers</button><button class="btn ghost sm" type="button" id="calclap">Clap along (headphones)</button></div>' +
-    '<p class="tiny" id="calinfo" aria-live="polite">' + (lat !== undefined ? 'Microphone timing: ' + lat + ' ms (measured).' : 'Not measured yet: the keyboard timing (' + (S.prefs.latencyMs || 0) + ' ms) is used.') + '</p></div>' +
+    '<p class="tiny" id="calinfo" aria-live="polite">' + (() => { const li = micLatInfo(S.prefs.micId); return li.own ? 'Timing for this microphone and these headphones: ' + li.ms + ' ms (measured).' : li.measured ? 'Not measured for this microphone and these headphones yet. The last measurement (' + li.ms + ' ms) is used: measure again to be exact.' : 'Not measured yet: the keyboard timing (' + li.ms + ' ms) is used.'; })() + '</p></div>' +
     '<div><b>3. Record</b><label class="switch"><input type="checkbox" data-bind="pmonitor"' + (pst().monitor ? ' checked' : '') + '><span>Hear myself in the headphones while recording (with the vocal sound). Only with headphones: with speakers it howls.</span></label>' +
     '<div class="row wrap"><button class="btn ghost" type="button" id="guidetest">' + icon('mic') + 'Test the microphone</button>' +
     '<button class="btn primary" type="button" id="guiderec">' + icon('mic') + (g ? 'Record ' + esc(trackName(P, cur)) + ': take ' + ((g.takes.reduce((a, t) => Math.max(a, t.n || 0), 0) || 0) + 1) : 'Record ' + esc(tid ? cur.name : 'the lead vocal (guide)')) + '</button></div></div></div>' +
@@ -218,7 +261,7 @@ function guideCard(P) {
       '<div class="row wrap"><button class="btn ghost sm" type="button" id="guidehear">' + icon('play') + 'Listen: with the vocal sound</button><button class="btn ghost sm" type="button" id="guideraw">' + icon('play') + 'Listen: raw (before)</button>' +
       '<button class="btn ghost sm" type="button" data-act="pguidesave">Save this track (24-bit WAV)</button><button class="btn ghost sm" type="button" data-act="pguidedel">Delete all takes</button></div>' +
       '<div class="grid2"><label class="field"><span>Track volume</span><input type="range" min="0" max="200" value="' + Math.round((g.gain == null ? 1 : g.gain) * 100) + '" data-bind="pguidegain" aria-label="Guide volume"></label>' +
-      '<label class="field"><span>Line up this track by hand <b class="mono" id="nudgev">' + (g.nudgeMs || 0) + '</b> ms</span><input type="range" min="-250" max="250" step="5" value="' + (g.nudgeMs || 0) + '" data-bind="pguidenudge" aria-label="Guide timing"></label></div>' +
+      '<label class="field"><span>Line up this track by hand <b class="mono" id="nudgev">' + (g.nudgeMs || 0) + '</b> ms</span><input type="range" min="-500" max="500" step="5" value="' + (g.nudgeMs || 0) + '" data-bind="pguidenudge" aria-label="Guide timing"></label></div>' +
       '<p class="tiny">Press Play the song with "With the recorded tracks" ticked to hear every track with the backing. Volume, left-right place, mute and solo are in the Mixer.</p>';
   }
   return html + '</section>';
@@ -286,21 +329,27 @@ function lyricsHtml(P) {
 function viewProject(pid) {
   const P = S.songs.find(s => s.id === pid); if (!P) return viewSong.call(null);
   migrateProject(P);
+  if (SongHistory.id() !== P.id) SongHistory.begin(P);   // Undo and Redo start from the song as you opened it
+  GuideStore.hold = true;                               // recordings you delete are kept until you leave the song
   if (!SECTION_TYPES.includes(pst().sec)) pst().sec = 'Chorus';
+  if (!['write', 'arrange', 'record', 'mix', 'share'].includes(pst().tab)) pst().tab = 'write';
   const st = P.steps, nDone = Object.values(st).filter(Boolean).length, secs = songSeconds(P);
-  const html = '<div class="screen">' + howTo('project', 'How this song page works', ['Choose a section with the chips (Verse, Chorus…). Its chords and melody are edited below.', 'Chords: play them in from your keyboard, tap them from the key, the suggestions or the Gospel colours. Tap a chord in the strip to change its type (9th, 13th, sus…), give it a bass note (F/G), a length, or a push.', 'Melody: play it in or sing it in after the count-in, then fix notes in the editor. Type the words under it, one syllable per note.', 'Step 4 puts the sections in order: repeats, a key change for the last chorus, tags, vamps and band stops.', 'Choir: switch on soprano, alto and tenor parts and save rehearsal audio for each.', 'At the bottom: the guide track, and the exports: audio, MIDI, lead sheet, chord chart and number chart.']) + '<div class="pagehead"><button class="btn ghost sm" type="button" data-act="go" data-to="song">' + icon('back') + 'Song Lab</button><h1 class="sr-only">Song: ' + esc(P.title || 'My song') + '</h1><label class="field"><span>Song title</span><input id="ptitle" type="text" maxlength="60" value="' + esc(P.title) + '" data-bind="ptitle"></label>' +
-    '<p class="muted">' + nDone + ' of 4 steps done' + (P.done ? ' · finished' : '') + ' · ' + esc(fmt(P.key)) + ' · ' + METERS[P.ts].label + ' · ' + P.bpm + ' BPM · ' + fmtTime(secs) + ' long</p>' + bar(nDone * 25) + '</div>' +
+  const html = '<div class="screen">' + howTo('project', 'How this song page works', ['Choose a section with the chips (Verse, Chorus…). Its chords and melody are edited below.', 'Chords: play them in from your keyboard, tap them from the key, the suggestions or the Gospel colours. Tap a chord in the strip to change its type (9th, 13th, sus…), give it a bass note (F/G), a length, or a push.', 'Melody: play it in or sing it in after the count-in, then fix notes in the editor. Type the words under it, one syllable per note.', 'Step 4 puts the sections in order: repeats, a key change for the last chorus, tags, vamps and band stops.', 'Choir: switch on soprano, alto and tenor parts and save rehearsal audio for each.', 'Once you have recorded, the Timeline shows every track. Drag across a track to choose a part: silence it, or sing just that part again. Undo and Redo (or Ctrl+Z and Ctrl+Y) bring every change back.', 'At the bottom: the guide track, and the exports: audio, MIDI, lead sheet, chord chart and number chart.']) + '<div class="pagehead"><button class="btn ghost sm" type="button" data-act="go" data-to="song">' + icon('back') + 'Song Lab</button><h1 class="sr-only">Song: ' + esc(P.title || 'My song') + '</h1><label class="field"><span>Song title</span><input id="ptitle" type="text" maxlength="60" value="' + esc(P.title) + '" data-bind="ptitle"></label>' +
+    safetyHtml(P) + '<p class="muted">' + nDone + ' of 4 steps done' + (P.done ? ' · finished' : '') + ' · ' + esc(fmt(P.key)) + ' · ' + METERS[P.ts].label + ' · ' + P.bpm + ' BPM · ' + fmtTime(secs) + ' long</p>' + bar(nDone * 25) + '</div>' +
     '<section class="card player"><div class="split"><div><p class="eyebrow">The whole song</p><h3 id="songpos">' + esc(formOf(P).map(i => itemLabel(i, P)).join(' · ')) + '</h3></div>' +
     '<div class="row wrap"><button class="btn primary" type="button" id="songplay">' + icon('play') + 'Play the song</button>' + (recordedTracks(P).length ? '<label class="switch"><input type="checkbox" data-bind="pwithguide"' + (pst().withGuide ? ' checked' : '') + '><span>With the recorded tracks</span></label>' : '') + '</div></div>' +
     (lowMem(P) ? '<p class="tiny memnote">' + icon('info') + ' Memory saver is on for this song (about ' + memEstimateMB(P) + ' MB of recordings and loops): tracks play with a light version of their vocal sound, and the saved song uses the full sound, one track at a time. Profile › Settings › Memory saver.</p>' : '') +
-    kbdOutRow() +
+    kbdOutRow() + undoRowHtml() +
     '<div class="songbar" id="songbar">' + (() => { const A = arrangeSong(P); return A.timeline.map(t => '<span style="flex:' + t.beats + '" title="' + esc(t.label) + '">' + esc(t.type) + '</span>').join(''); })() + '<i id="songcur"></i></div></section>' +
-    arrangeCard(P) + loopsCard(P) + chordsCard(P) + melodyCard(P) +
+    projTabsHtml() + '<div class="ptab' + (pst().tab === 'write' ? ' on' : '') + '" data-tab="write">' + chordsCard(P) + melodyCard(P) +
     '<section class="card"><p class="eyebrow">Step 3 ' + (st.chorus ? '<span class="tag ok">Done</span>' : '') + '</p><h3>Make it a chorus</h3><p class="muted">A chorus carries the main message and repeats. Write 2 to 4 short lines that someone could sing back after hearing them once.</p><label class="field"><span>Chorus lyrics</span><textarea id="lchorus" rows="4" data-bind="lchorus">' + esc(P.lyrics.chorus) + '</textarea></label>' +
     '<div class="row wrap"><button class="btn ' + (st.chorus ? 'ghost' : 'primary') + ' sm" data-act="pstep" data-k="chorus">' + (st.chorus ? 'Marked done' : 'Mark step done') + '</button></div></section>' +
-    formCard(P) + choirCard(P) +
-    guideCard(P) + mixerCard(P) + exportCard(P) + infoCard(P) +
-    '<div class="row wrap"><button class="btn ghost" data-act="pdel" data-id="' + esc(P.id) + '">' + (ui.confirmDel === P.id ? 'Tap again to delete this project' : 'Delete project') + '</button></div></div>';
+    infoCard(P) + '</div>' +
+    '<div class="ptab' + (pst().tab === 'arrange' ? ' on' : '') + '" data-tab="arrange">' + arrangeCard(P) + formCard(P) + loopsCard(P) + choirCard(P) + '</div>' +
+    '<div class="ptab' + (pst().tab === 'record' ? ' on' : '') + '" data-tab="record">' + guideCard(P) + timelineCard(P) + remoteCard() + '</div>' +
+    '<div class="ptab' + (pst().tab === 'mix' ? ' on' : '') + '" data-tab="mix">' + mixerCard(P) + '</div>' +
+    '<div class="ptab' + (pst().tab === 'share' ? ' on' : '') + '" data-tab="share">' + exportCard(P) +
+    '<div class="row wrap"><button class="btn ghost" data-act="pdel" data-id="' + esc(P.id) + '">' + (ui.confirmDel === P.id ? 'Tap again to delete this project' : 'Delete project') + '</button></div></div></div>';
   return { html, mount(root) { return mountProject(root, P); } };
 }
 
@@ -326,8 +375,8 @@ function mountProject(root, P) {
   cl.push(() => setTimeout(() => { if (!(route.name === 'song' && route.params && route.params.pid === P.id)) { GuideStore.forget(P.id); forgetLoops(P.id); } }, 0));
   /* whole-song player with a moving cursor and the current section and chord */
   const btn = $('#songplay', root), cur = $('#songcur', root), pos = $('#songpos', root);
-  let tick = null, playing = false, gsrc = null;
-  const reset = () => { playing = false; clearInterval(tick); if (gsrc) { try { gsrc.stop(); } catch (e) { /* ignore */ } gsrc = null; } tick = null; if (btn) btn.innerHTML = icon('play') + 'Play the song'; if (cur) cur.style.left = '0'; if (pos) pos.textContent = formOf(P).map(i => itemLabel(i, P)).join(' · '); };
+  let tick = null, playing = false, gsrc = null, live = null;
+  const reset = () => { if (live) { live.stop(); live = null; } playing = false; clearInterval(tick); if (gsrc) { try { gsrc.stop(); } catch (e) { /* ignore */ } gsrc = null; } tick = null; if (btn) btn.innerHTML = icon('play') + 'Play the song'; if (cur) cur.style.left = '0'; if (pos) pos.textContent = formOf(P).map(i => itemLabel(i, P)).join(' · '); };
   if (btn) btn.addEventListener('click', async () => {
     if (playing) { stopProjPlay(); reset(); return; }
     const A = arrangeSong(P, { melInst: Snd.inst() }), spb = 60 / P.bpm;
@@ -339,7 +388,7 @@ function mountProject(root, P) {
     let start = 0; playing = true; btn.innerHTML = icon('stop') + 'Stop';
     playScript(A.script, {
       // a processed guide already has its room, so it goes straight to the output (no second reverb)
-      onStart: (t, c, bus) => { start = t; if (guide) gsrc = Snd.playBuffer(guide, t + (P.guide.nudgeMs || 0) / 1000, P.guide.gain == null ? 1 : P.guide.gain, curTrack(P).fx.preset !== 'off' ? Snd.dryBus() : bus); },
+      onStart: (t, c, bus) => { start = t; if (live) live.stop(); live = liveStart(P, t, 0); if (guide) gsrc = Snd.playBuffer(guide, t + (P.guide.nudgeMs || 0) / 1000, P.guide.gain == null ? 1 : P.guide.gain, curTrack(P).fx.preset !== 'off' ? Snd.dryBus() : bus); },
       onEnd: () => reset()
     });
     const meter = Snd.meter(), mbuf = meter ? new Float32Array(meter.fftSize) : null, mEl = $('#mastermeter'), mTxt = $('#mastermeterv');
@@ -457,6 +506,19 @@ function mountProject(root, P) {
 
   /* note editor */
   mountRoll(root, P);
+  /* the timeline, Undo and Redo keys, and what happens when you leave the song */
+  cl.push(mountTimeline(root, P));
+  const onUndoKey = e => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+    const t = e.target; if (t && /^(TEXTAREA|SELECT)$/.test(t.tagName) || (t && t.tagName === 'INPUT' && !['range', 'checkbox', 'radio', 'button'].includes(t.type))) return;   // text fields keep their own undo
+    const k = (e.key || '').toLowerCase();
+    if (k === 'z' && !e.shiftKey) { e.preventDefault(); PROJECT_ACTIONS.hundo(); } else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); PROJECT_ACTIONS.hredo(); }
+  };
+  window.addEventListener('keydown', onUndoKey); cl.push(() => window.removeEventListener('keydown', onUndoKey));
+  cl.push(() => setTimeout(() => {
+    if (route.name === 'song' && route.params && route.params.pid === P.id) return;   // a redraw of the same song
+    ui.safetyLater = null; SongHistory.end(); GuideStore.hold = false; const SP = S.songs.find(x => x.id === P.id); if (SP) GuideStore.purge(SP).catch(() => {});
+  }, 0));
 
   /* guide track: microphone, level, level and room check, timing, recorder with monitoring, listening */
   const gBtn = $('#guiderec', root), gInfo = $('#guideinfo', root), gLvl = $('#guidelvl', root), gMic = $('#guidemic', root), gTest = $('#guidetest', root), gHear = $('#guidehear', root), gRaw = $('#guideraw', root);
@@ -467,7 +529,18 @@ function mountProject(root, P) {
     const mics = await listMics();
     gMic.innerHTML = '<option value="">Windows default microphone</option>' + mics.filter(m => m.deviceId && m.deviceId !== 'default' && m.deviceId !== 'communications').map((m, i) => '<option value="' + esc(m.deviceId) + '"' + (m.deviceId === S.prefs.micId ? ' selected' : '') + '>' + esc(m.label || ('Microphone ' + (i + 1))) + '</option>').join('');
   };
-  fillMics();
+  const gOut = $('#guideout', root);
+  const fillOuts = async () => {
+    if (!gOut) return;
+    let outs = []; try { outs = (await navigator.mediaDevices.enumerateDevices()).filter(x => x.kind === 'audiooutput'); } catch (e) { /* none */ }
+    const can = typeof AudioContext !== 'undefined' && typeof AudioContext.prototype.setSinkId === 'function';
+    gOut.innerHTML = '<option value="">Windows default</option>' + (can ? outs.filter(m => m.deviceId && m.deviceId !== 'default' && m.deviceId !== 'communications').map((m, i) => '<option value="' + esc(m.deviceId) + '"' + (m.deviceId === S.prefs.outId ? ' selected' : '') + '>' + esc(m.label || ('Output ' + (i + 1))) + '</option>').join('') : '');
+    gOut.disabled = !can;
+  };
+  fillMics(); fillOuts();
+  const onDevices = () => { fillMics(); fillOuts(); };
+  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) { navigator.mediaDevices.addEventListener('devicechange', onDevices); cl.push(() => navigator.mediaDevices.removeEventListener('devicechange', onDevices)); }
+  if (typeof Snd.setOutput === 'function') Snd.setOutput();
   let g = null, tst = null, hear = null, chk = null, cal = null;
   const noMic = () => !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
   const stopTest = () => { if (tst) { const t = tst; tst = null; t.stop(); } };
@@ -539,24 +612,27 @@ function mountProject(root, P) {
     const buf = await GuideStore.takeBuffer(t.k).catch(() => null); if (!buf) { gInfo.textContent = 'That take was not found on this computer.'; return; }
     const c = Snd.ensure(); hear = Snd.playBuffer(buf, c.currentTime + 0.05, 1, Snd.dryBus());
   }));
-  if (gBtn) gBtn.addEventListener('click', () => {
+  if (gBtn) gBtn.addEventListener('click', async () => {
     if (g) { g.stop(); return; }
     if (noMic()) { gInfo.textContent = 'Recording is not available on this device.'; return; }
     stopProjPlay(); stopAllMic();
-    gBtn.innerHTML = icon('stop') + 'Stop recording';
+    if (typeof tlBusy === 'function' && tlBusy()) { gInfo.textContent = 'Finish the part you are singing again first.'; return; }
+    const room = await storageRoomMB(); if (room !== null && room < 150) { gInfo.textContent = 'There is only ' + room + ' MB of room left on this computer, not enough for a recording. Free some space first (delete files you do not need).'; return; }
+    gBtn.innerHTML = icon('stop') + 'Stop recording'; ui.recording = true; let liveRec = null;
     g = startGuideRecording(P, st => {
       if (st.state === 'level') { showLvl(st.peak); return; }
-      if (st.state === 'recording') { gInfo.textContent = 'Recording' + (st.label ? ' from ' + st.label : '') + '. Watch the green bar move as you sing.' + (pst().monitor ? ' You hear yourself with the vocal sound.' : ''); return; }
-      showLvl(0);
+      if (st.state === 'recording') { gInfo.textContent = 'Recording' + (st.label ? ' from ' + st.label : '') + (st.settings ? ' (' + Math.round(st.settings.sampleRate / 100) / 10 + ' kHz)' : '') + '. Watch the green bar move as you sing.' + (pst().monitor ? ' You hear yourself with the vocal sound.' : ''); return; }
+      if (st.state === 'started') { if (liveRec) liveRec.stop(); liveRec = liveStart(P, st.start, st.fromBeat); return; }
+      showLvl(0); ui.recording = false; if (liveRec) { liveRec.stop(); liveRec = null; }
       if (st.state === 'saved') {
         g = null; pst().withGuide = true;
-        toast('Take ' + st.take + ' saved (' + fmtTime(st.seconds) + ').' + (st.quiet ? ' It was quiet, so the app boosted it. Move closer next time.' : ''));
+        toast('Take ' + st.take + ' saved (' + fmtTime(st.seconds) + ').' + (st.quiet ? ' It was quiet, so the app boosted it. Move closer next time.' : '') + (st.cleared ? ' The fixes on the old take were put away (Undo brings them back).' : ''));
         render();
       } else { g = null; gBtn.innerHTML = icon('mic') + 'Record again'; gInfo.textContent = st.msg || 'Nothing was recorded.'; }
     }, { deviceId: S.prefs.micId || null, trackId: pst().trk || '', monitor: pst().monitor ? ((curTrack(P) || {}).fx || {}).preset || 'worship' : null });
   });
   cl.push(() => { stopAllMic(); });
-  cl.push(() => { if (g) g.stop(); });
+  cl.push(() => { if (g) g.stop(); ui.recording = false; });
   return () => cl.forEach(f => { try { f(); } catch (e) { /* ignore */ } });
 }
 
@@ -754,11 +830,25 @@ const PROJECT_ACTIONS = {
     const P = curProj(), info = $('#expinfo');
     const r = await runExport(() => exportPackage(P), 'Packing the song and its recordings');
     if (r && r.canceled) { if (info) info.textContent = 'Not saved.'; return; }
-    if (r && info) { info.textContent = 'Saved ' + r.name + ' (' + (r.bytes / 1048576).toFixed(1) + ' MB, ' + r.count + ' recordings and loops)' + (r.missing ? '. ' + r.missing + ' recordings were not found on this computer and are not in it.' : '.'); toast('Song package saved.'); }
+    if (r && info) { info.textContent = 'Saved ' + r.name + ' (' + (r.bytes / 1048576).toFixed(1) + ' MB, ' + r.count + ' recordings and loops)' + (r.missing ? '. ' + r.missing + ' recordings were not found on this computer and are not in it.' : '.'); if (!r.missing) setTimeout(render, 1200); toast('Song package saved.'); }
   },
   plyrics: () => { const P = curProj(), name = songSlug(P) + '_lyrics.html'; saveFile(name, 'text/html', lyricsHtml(P)); toast('Lyrics sheet saved. Open it to print or save as PDF.'); },
   psec: el => { pst().sec = el.dataset.s; pst().sel = -1; pst().ci = -1; render(); },
   psecm: el => { pst().sec = el.dataset.s; pst().sel = -1; pst().ci = -1; render(); },
+  pflav: el => { const f = el.dataset.f; if (CHORD_FLAVOURS.some(x => x[0] === f)) { pst().flav = f; render(); } },
+  psaveprog: () => {
+    const P = curProj(), cur = P.sections[pst().sec].chords; if (!cur.length) return;
+    const name = (pst().progName || '').trim() || 'My progression', fid = 'p' + Date.now().toString(36) + Math.floor(Math.random() * 1e3).toString(36);
+    S.progs = (S.progs || []).filter(x => x.name !== name); S.progs.unshift({ fid, name: name.slice(0, 60), at: Date.now(), chords: cur.map(c => ({ r: c.r, q: c.q, b: c.b === undefined ? null : c.b, beats: c.beats, push: !!c.push })) });
+    S.progs.length = Math.min(S.progs.length, 40); pst().progName = ''; pst().progsOpen = true; touch(); toast('Saved "' + name + '".'); render();
+  },
+  pprogreplace: el => { const P = curProj(), x = (S.progs || []).find(f => f.fid === el.dataset.id); if (!x) return; P.sections[pst().sec].chords = x.chords.map(c => Object.assign({}, c)); P.sections[pst().sec].chords[0].push = false; pst().ci = -1; pst().progsOpen = true; syncLegacy(P); touch(); previewChord(P, x.chords[0]); render(); },
+  pprogadd: el => {
+    const P = curProj(), x = (S.progs || []).find(f => f.fid === el.dataset.id), s = P.sections[pst().sec]; if (!x) return;
+    if (s.chords.length + x.chords.length > MAX_SECTION_CHORDS) { toast('That would be more than ' + MAX_SECTION_CHORDS + ' chords in one section.'); return; }
+    s.chords = s.chords.concat(x.chords.map(c => Object.assign({}, c))); pst().progsOpen = true; syncLegacy(P); touch(); render();
+  },
+  pprogdel: el => { S.progs = (S.progs || []).filter(f => f.fid !== el.dataset.id); pst().progsOpen = true; touch(); render(); },
   pcadd: el => {
     const P = curProj(), s = P.sections[pst().sec];
     if (s.chords.length >= MAX_SECTION_CHORDS) { toast(MAX_SECTION_CHORDS + ' chords is the most a section can hold.'); return; }
@@ -817,7 +907,9 @@ const PROJECT_ACTIONS = {
     if (!g.takes.length) { if (!g.id) P.guide = null; } else if (g.main >= g.takes.length || g.main === i) g.main = g.takes.length - 1; else if (g.main > i) g.main--;
     GuideStore.invalidate(); touch(); render();
   },
-  plimport: () => { const f = $('#loopfile'); if (f) f.click(); },
+  plimport: () => { ui.drumImport = false; const f = $('#loopfile'); if (f) f.click(); },
+  pdrumreal: () => { ui.drumImport = true; const f = $('#loopfile'); if (f) f.click(); },
+  pdrumback: () => { const P = curProj(); P.beat = P.beatWas || 'rock'; delete P.beatWas; (P.loops || []).forEach(L => { if (L.role === 'drums') L.mute = true; }); touch(); toast('The built-in drums are back, and your drum recording is muted (it is still in the Loops list).'); render(); },
   pldel: async el => {
     const P = curProj(), i = +el.dataset.i, L = (P.loops || [])[i]; if (!L) return;
     if (ui.confirmLoop !== L.id) { ui.confirmLoop = L.id; toast('Press Delete again to remove ' + L.name + '.'); setTimeout(() => { ui.confirmLoop = null; }, 4000); return; }
@@ -837,7 +929,7 @@ function loopSet(el, fn, quiet) { const P = curProj(), L = (P.loops || [])[+el.d
 async function importLoops(P, files) {
   const info = $('#loopinfo'), say = t => { if (info) info.textContent = t; };
   P.loops = P.loops || [];
-  const songPc = E.pcOfName(P.key), used = [...new Set(songStructure(P))];
+  const songPc = E.pcOfName(P.key), used = [...new Set(songStructure(P))], asDrums = !!ui.drumImport, before = P.loops.length; ui.drumImport = false;
   for (const f of files) {
     if (P.loops.length >= MAX_LOOPS) { toast(MAX_LOOPS + ' loops is the most a song can hold.', 'warn'); break; }
     const id = 'l' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36), nm = LoopTools.fromName(f.name), name = (nm.title || 'Loop').slice(0, 60);
@@ -853,13 +945,18 @@ async function importLoops(P, files) {
         const buf = await c.decodeAudioData(await f.arrayBuffer());
         const x = buf.getChannelData(0), secs = buf.duration, kind = secs > 30 ? 'beat' : 'loop';
         const tp = LoopTools.detectTempo(x, buf.sampleRate, { nameBpm: nm.bpm, kind, bar: meterOf(P).bar });
-        const role = nm.role || 'music', tr = role !== 'drums' && nm.keyPc !== undefined ? LoopTools.transposeTo(nm.keyPc, nm.minor, songPc) : 0;
+        const role = asDrums ? 'drums' : (nm.role || 'music'), tr = role !== 'drums' && nm.keyPc !== undefined ? LoopTools.transposeTo(nm.keyPc, nm.minor, songPc) : 0;
         await GuideStore.put('loop:' + P.id + ':' + id, f);
         P.loops.push({ id, name, kind, role, bpm: tp.bpm, beats: tp.beats, dur: Math.round(secs), keyPc: nm.keyPc, minor: !!nm.minor, tr: kind === 'beat' ? 0 : tr, gain: 1, mute: false, secs: kind === 'loop' ? used : [], offset: kind === 'beat' ? Math.round(LoopTools.firstOnset(x, buf.sampleRate) * 100) / 100 : 0, from: tp.from });
         say(name + ': ' + Math.round(tp.bpm * 10) / 10 + ' BPM (' + ({ name: 'from the file name', length: 'from its length', audio: 'measured', guess: 'a guess: please check' })[tp.from] + ')' + (tr ? ', moved ' + (tr > 0 ? 'up ' : 'down ') + Math.abs(tr) + ' to the song key' : '') + '.');
       }
       touch();
     } catch (e) { toast(f.name + ' could not be imported: ' + (e && e.message ? e.message : 'unknown file type') + '.', 'warn'); }
+  }
+  if (asDrums && P.loops.length > before) {   // a real drum recording replaces the built-in drums (they can be brought back)
+    if (P.beat && P.beat !== 'none') { P.beatWas = P.beat; P.beat = 'none'; }
+    P.loops.slice(before).forEach(L => { L.role = 'drums'; L.tr = 0; });
+    touch(); toast('Your drum recording is in, and the built-in drums are off. If its tempo is different from the song\'s, press "Use the beat\'s tempo for the song" on it.');
   }
   render();
 }
@@ -877,6 +974,9 @@ const PROJECT_BINDS = {
   pinfo: el => { const P = curProj(); P.info = Object.assign({}, P.info || {}, { [el.dataset.k]: String(el.value || '').slice(0, el.dataset.k === 'notes' ? 1000 : 120) }); touch(); const c = $('#copyline'); if (c) c.textContent = copyrightLine(P) || 'Fill in the writers to make the copyright line.'; },
   pending: el => { const P = curProj(); P.ending = ENDINGS[el.value] ? el.value : 'none'; touch(); render(); },
   pffill: el => formSet(el, it => { it.fill = el.checked; }),
+  pffk: el => formSet(el, it => { it.fk = el.value; }),
+  pprogname: el => { pst().progName = String(el.value || '').slice(0, 60); },
+  phuman: el => { const P = curProj(); P.human = Math.max(0, Math.min(2, parseInt(el.value, 10) || 0)); touch(); render(); },
   pfswell: el => formSet(el, it => { it.swell = el.checked; }),
   pbpm: el => { const P = curProj(); P.bpm = +el.value; const v = $('#pbpmv'); if (v) v.textContent = P.bpm; touch(); },
   pswing: el => { const P = curProj(); P.swing = +el.value; touch(); },

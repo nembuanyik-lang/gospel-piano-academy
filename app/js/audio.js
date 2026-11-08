@@ -85,12 +85,22 @@ const Snd = (function () {
   ['pointerdown', 'keydown', 'touchstart'].forEach(t => document.addEventListener(t, wake, true));
   document.addEventListener('visibilitychange', () => { if (!document.hidden) wake(); });
   window.addEventListener('focus', wake);
+  /* play through the chosen output (an audio interface's headphone output, say); '' = the system's default.
+     Nothing is asked of the sound system unless the choice changed, so a computer with the default output behaves as before. */
+  let outApplied = '';
+  function applyOut() {
+    try {
+      const id = (S.prefs && S.prefs.outId) || ''; if (!ctx || id === outApplied || typeof ctx.setSinkId !== 'function') return;
+      outApplied = id; const r = ctx.setSinkId(id); if (r && r.catch) r.catch(() => { outApplied = ''; });
+    } catch (e) { /* the default output is used */ }
+  }
   function ensure() {
     if (ctx && ctx.state === 'closed') resetContext();
     if (!ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return null;
       try { ctx = new AC({ latencyHint: 'interactive' }); } catch (e) { try { ctx = new AC(); } catch (e2) { return null; } }
+      outApplied = ''; applyOut();
       master = ctx.createGain(); master.gain.value = 0.9;
       const comp = ctx.createDynamicsCompressor();
       comp.threshold.value = -14; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.2;
@@ -276,7 +286,7 @@ const Snd = (function () {
   }
   function osc(c, type, freq, dest, when, v, cents, vib) {
     const o = c.createOscillator(); o.type = type; o.frequency.value = freq; if (cents) o.detune.value = cents;
-    if (vib) vib.connect(o.detune);
+    if (vib) { if (!v.vibG) { v.vibG = c.createGain(); vib.connect(v.vibG); } v.vibG.connect(o.detune); }   // each note has its own vibrato level, so it can be faded out as the note ends
     o.connect(dest); o.start(when); o.stop(when + 120); v.nodes.push(o); return o;
   }
   const INSTR = {
@@ -328,12 +338,12 @@ const Snd = (function () {
     } },
     choir: { label: 'Choir (aah)', hint: 'Soft sung voices.', chordy: true, gm: 52, build(c, v, m, when, vel, amp, f, light) {
       const e = env(c, v, when, 1, 0.16, 0.34), vb = lfoFor(c).slow, src = c.createGain(); src.gain.value = 1;
-      [[800, 7, 1], [1150, 8, 0.55], [2900, 10, 0.3]].forEach(([hz, q, gn]) => {
+      [[800, 4, 1], [1150, 4.5, 0.55], [2900, 6, 0.3]].forEach(([hz, q, gn]) => {
         const bp = c.createBiquadFilter(), g = c.createGain(); bp.type = 'bandpass'; bp.frequency.value = hz; bp.Q.value = q; g.gain.value = amp * 1.15 * gn;
         src.connect(bp); bp.connect(g); g.connect(e);
       });
-      const sg = c.createGain(); sg.gain.value = 0.5; sg.connect(src);
-      [-7, 7].slice(0, light ? 1 : 2).forEach(d => osc(c, 'sawtooth', f, sg, when, v, d, vb));
+      const sg = c.createGain(); sg.gain.value = light ? 0.5 : 0.36; sg.connect(src);
+      [-9, 1, 8].slice(0, light ? 1 : 3).forEach(d => osc(c, 'sawtooth', f, sg, when, v, d, vb));
     } },
     flute: { label: 'Flute', hint: 'A breathy, singing melody sound.', chordy: false, gm: 73, build(c, v, m, when, vel, amp, f, light) {
       const e = env(c, v, when, 1, 0.06, 0.12), vb = lfoFor(c).slow;
@@ -418,17 +428,20 @@ const Snd = (function () {
     }
     return v;
   }
+  const MAX_REL = 0.17;   // longest release time constant (seconds); about 0.8 s until silent
   function release(v, t, fast) {
     if (v.released) return; v.released = true;
     const c = v.c, at = Math.max(t, c.currentTime);
-    const tau = fast ? 0.025 : (v.rel || clamp(0.2 - (v.m - 36) * 0.0022, 0.05, 0.2));   // damper falls faster on high strings
+    // damper falls faster on high strings; a long release (strings, choir, pads) is kept short so no slow "whoa, whoa" is left hanging after you let go
+    const tau = fast ? 0.025 : Math.min(MAX_REL, v.rel || clamp(0.2 - (v.m - 36) * 0.0022, 0.05, 0.2));
     try { v.vg.gain.cancelScheduledValues(at); v.vg.gain.setTargetAtTime(0, at, tau); } catch (e) { /* ignore */ }
+    if (v.vibG) { try { v.vibG.gain.cancelScheduledValues(at); v.vibG.gain.setTargetAtTime(0, at, 0.04); } catch (e) { /* ignore */ } }   // the pitch wobble stops with the note
     const end = at + tau * 7 + 0.05;
     v.end = end;
     v.nodes.forEach(n => { try { n.stop(end); } catch (e) { /* ignore */ } });
     if (c instanceof OfflineAudioContext) return;   // an export clears finished notes itself (see render)
     const sweep = () => {   // follow the audio clock, not the wall clock, so a paused or lagging context never cuts a note short
-      if (c.state === 'closed' || c.currentTime >= end) { try { v.vg.disconnect(); } catch (e) { /* ignore */ } }
+      if (c.state === 'closed' || c.currentTime >= end) { try { v.vg.disconnect(); } catch (e) { /* ignore */ } if (v.vibG) { try { v.vibG.disconnect(); } catch (e) { /* ignore */ } } }
       else setTimeout(sweep, Math.max(60, (end - c.currentTime) * 1000) + 150);
     };
     setTimeout(sweep, Math.max(0, (end - c.currentTime) * 1000) + 150);
@@ -666,7 +679,7 @@ const Snd = (function () {
   }
   window.addEventListener('blur', () => { pedal(false, 'key'); releaseAll(); });
   return {
-    ensure, now: () => (ctx ? ctx.currentTime : 0), note, noteOn, noteOff, pedal, pedalState: () => pedalDown, pedalSrcHas: s => pedalSrc.has(s),
+    ensure, setOutput: applyOut, now: () => (ctx ? ctx.currentTime : 0), note, noteOn, noteOff, pedal, pedalState: () => pedalDown, pedalSrcHas: s => pedalSrc.has(s),
     play, stopAll, metro, tone: (m, d) => { const c = ensure(); if (c) { const v = buildVoice(c, master, m, c.currentTime, 0.7, 0.62); release(v, c.currentTime + (d || 1)); } },
     info: () => ({ mode: sample.state === 'ready' ? 'recorded' : 'synth', credit: sample.credit, loading: sample.state === 'loading', state: sample.state,
       bank: bank.state, bankCredit: bank.credit, room: roomId() }),

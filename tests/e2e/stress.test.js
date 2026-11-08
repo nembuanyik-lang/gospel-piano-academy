@@ -1,3 +1,4 @@
+const T = require('./tabs').auto;
 // A full-length song as a real session would leave it: about four minutes, three recorded tracks (four-minute 24-bit
 // takes with the vocal chain on), a drum loop, a keys loop, choir parts, a key change, tags and an ending. Measures
 // how long playback takes to start, the mastered export, and the stems, and checks the results.
@@ -37,7 +38,7 @@ test.after(async () => { await browser.close(); srv.close(); });
 test('a four-minute song with three tracks, loops and choir: plays, masters, exports and makes stems in reasonable time', { timeout: 30 * 60 * 1000 }, async () => {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
   await ctx.addInitScript(() => { window.lamejs = { Mp3Encoder: class { encodeBuffer(l) { return new Int8Array(Math.ceil(l.length / 1152) * 626); } flush() { return new Int8Array(0); } } }; });
-  const page = await ctx.newPage(), errors = [];
+  const page = T(await ctx.newPage()), errors = [];
   await useFakeSounds(page);
   if (process.env.MEM_SAVER) await page.addInitScript(v => { window.__memSaver = v; }, process.env.MEM_SAVER);
   page.on('pageerror', e => errors.push(e.message));

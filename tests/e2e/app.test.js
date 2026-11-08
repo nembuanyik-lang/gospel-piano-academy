@@ -1,3 +1,4 @@
+const T = require('./tabs').auto;
 // Browser tests: `npm run e2e` (needs the playwright package and its Chromium: `npx playwright install chromium`).
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -13,7 +14,7 @@ test.after(async () => { await browser.close(); srv.close(); });
 
 async function open(opts) {
   const ctx = await browser.newContext(Object.assign({ viewport: { width: 1280, height: 800 } }, opts));
-  const page = await ctx.newPage();
+  const page = T(await ctx.newPage());
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });

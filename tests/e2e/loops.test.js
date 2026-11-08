@@ -1,3 +1,4 @@
+const T = require('./tabs').auto;
 // Loops and beats in the Song Lab: import audio loops, a whole beat and a MIDI file; tempo and key are read from the
 // name or measured; loops are stretched to the song's tempo with their pitch kept and moved into the song's key;
 // the app's own parts can be switched off; everything reaches the audio and MIDI exports.
@@ -33,7 +34,7 @@ function midiFile() {
 
 async function open() {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
-  const page = await ctx.newPage(), errors = [];
+  const page = T(await ctx.newPage()), errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
   await page.goto('http://localhost:' + PORT + '/');
