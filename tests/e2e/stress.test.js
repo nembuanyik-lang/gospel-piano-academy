@@ -51,6 +51,7 @@ test('a four-minute song with three tracks, loops and choir: plays, masters, exp
     g.go('song'); g.ACTIONS.slnew();
     const P = g.S().songs[g.S().songs.length - 1];
     Object.assign(P, { title: 'Stress', key: 'Ab', bpm: 76, beat: 'sunday', style: 'sunday', bassStyle: 'gospel', ending: 'ritard', choir: { on: true }, info: { writers: 'Minister Kemamah' } });
+    P.mixer = { chords: { v: 1, pan: -0.2, tone: 0.3, comp: 0.5, room: 0.3, lc: 100, em: 3, ef: 1500, duck: 0.4 }, bass: { v: 1, pan: 0, tone: -0.3, comp: 0.6, el: 2, eh: -2, duck: 0.5 }, drums: { v: 1, pan: 0, comp: 0.4, room: 0.2 }, melody: { v: 1, pan: 0.2, tone: 0.2, room: 0.4 }, choir: { v: 0.9, pan: 0, comp: 0.3, room: 0.5 }, loops: { v: 1, pan: 0 } };   // every part has its sound switched on
     const C = (r, q, b) => ({ r, q, b: b === undefined ? null : b, beats: 4, push: false });
     P.sections.Intro.chords = [C(0, 'maj9'), C(5, 'major', 7)];
     P.sections.Verse.chords = [C(0, 'maj7'), C(4, '7'), C(9, 'm7'), C(5, 'maj7'), C(2, 'm7'), C(7, '13'), C(0, 'major', 4), C(5, 'major')];
@@ -111,6 +112,14 @@ test('a four-minute song with three tracks, loops and choir: plays, masters, exp
   await page.waitForFunction(() => /recordings and loops/.test(document.querySelector('#expinfo').textContent), null, { timeout: 300000, polling: 1000 });
   if (dlPkg) desk.saved.push(await dlPkg.path());
   timing.package = (Date.now() - t) / 1000;
+  phase = 'release'; t = Date.now();
+  let dlRel = null; if (process.env.BROWSER_SAVE) page.once('download', d => { dlRel = d; });
+  await page.click('[data-act=prelease]');
+  await page.waitForFunction(() => /Checked/.test((document.querySelector('#relresult') || {}).textContent || ''), null, { timeout: 900000, polling: 1000 });
+  if (dlRel) desk.saved.push(await dlRel.path());
+  timing.release = (Date.now() - t) / 1000;
+  const relNames = useDesktopSave.zipNames(fs.readFileSync(desk.saved[desk.saved.length - 1])).map(e => e.name);
+  assert.ok(relNames.some(n => /\.wav$/.test(n)) && relNames.includes('README.txt'), 'the release ZIP holds the WAV and the note: ' + relNames);
   const mem = await page.evaluate(() => performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : null);
   // limits a musician would accept on a laptop (this test machine is slower than most)
   assert.ok(timing.firstPlay < 90, 'first play starts within 90 s: ' + timing.firstPlay);

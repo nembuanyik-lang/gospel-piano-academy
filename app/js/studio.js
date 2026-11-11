@@ -9,7 +9,20 @@ const SECTION_TYPES = ['Intro', 'Verse', 'Pre-chorus', 'Chorus', 'Bridge', 'Outr
 const ENERGY = { Intro: 0.62, Verse: 0.74, 'Pre-chorus': 0.84, Chorus: 1, Bridge: 0.8, Outro: 0.62 };
 const ENERGY_SET = { soft: 0.58, normal: null, full: 1 };
 const METERS = { 4: { label: '4/4', bar: 4, hint: 'Four beats in a bar' }, 3: { label: '3/4', bar: 3, hint: 'Waltz: three beats' }, 6: { label: '6/8', bar: 3, compound: true, hint: 'Two swaying beats of three' } };
-const BASS_STYLES = { root: 'Root, held', rootfifth: 'Root and fifth', octaves: 'Octaves', walking: 'Walking (4/4 only)', gospel: 'Gospel (approach notes into each chord)', pump: 'Octave pump (shout and praise)', makossa: 'Makossa (syncopated)' };
+const BASS_STYLES = { root: 'Root, held', rootfifth: 'Root and fifth', octaves: 'Octaves', walking: 'Walking (4/4 only)', gospel: 'Gospel (approach notes into each chord)', pump: 'Octave pump (shout and praise)', makossa: 'Makossa (syncopated)',
+  worship: 'Slow worship (long notes, soft fifth)', reggae: 'Reggae (one-drop, space on beat 1)', highlife: 'Highlife (bouncy)', funk: 'Funk (short, busy)',
+  motown: 'Motown (steady eighths)', tumbao: 'Latin tumbao', bikutsi: 'Bikutsi / Assiko (driving)' };
+/* the bass sound: the number is the General MIDI program in the sound library (without a library the bass is played by the piano sound as before) */
+const BASS_SOUNDS = { finger: ['Finger bass (the usual)', 33], pick: ['Pick bass (brighter)', 34], upright: ['Upright bass (acoustic)', 32], fretless: ['Fretless (smooth)', 35], slap: ['Slap bass (funk)', 36], synth: ['Synth bass', 38], sub: ['Deep sub bass (modern)', 39] };
+/* patterns for one bar of four beats: [where in the bar, how long, which note] - note: 0 root, a number of semitones above the root, 'n' = a step into the next chord, 'th' = the chord's third */
+const BASS_PATTERNS = {
+  reggae: [[1.5, 0.4, 0], [2, 1.2, 0], [3.5, 0.4, 7]],
+  highlife: [[0, 0.75, 0], [1, 0.5, 7], [1.5, 0.5, 0], [2, 0.75, 12], [3, 0.5, 7], [3.5, 0.5, 'n']],
+  funk: [[0, 0.3, 0], [0.75, 0.2, 0], [1.5, 0.3, 12], [2, 0.3, 0], [2.5, 0.2, 10], [3, 0.3, 7], [3.5, 0.2, 'n']],
+  motown: [[0, 0.45, 0], [0.5, 0.45, 0], [1, 0.45, 12], [1.5, 0.45, 0], [2, 0.45, 7], [2.5, 0.45, 0], [3, 0.45, 5], [3.5, 0.45, 'n']],
+  tumbao: [[0, 0.45, 0], [1.5, 0.45, 7], [2, 0.9, 0], [3.5, 0.4, 'n']],
+  bikutsi: [[0, 0.4, 0], [0.5, 0.4, 0], [1, 0.4, 12], [1.5, 0.4, 0], [2, 0.4, 0], [2.5, 0.4, 7], [3, 0.4, 12], [3.5, 0.4, 'n']]
+};
 const CHORD_LENS = [[1, 'One bar each'], [2, 'Two bars each'], [0.5, 'Half a bar each']];
 const LEN_CHOICES = [0.5, 1, 1.5, 2, 3, 4, 6, 8, 12, 16];
 const MAX_SECTION_CHORDS = 32;
@@ -21,6 +34,7 @@ const SC = Songcraft;
 function migrateProject(P) {
   if (!P) return P;
   if (!P.ts || !METERS[P.ts]) P.ts = 4;
+  if (P.bassSound && !BASS_SOUNDS[P.bassSound]) P.bassSound = 'finger';
   if (!P.bassStyle || !BASS_STYLES[P.bassStyle]) P.bassStyle = P.style === 'groove' ? 'rootfifth' : 'root';
   const bar = METERS[P.ts].bar;
   P.sections = P.sections || {};
@@ -42,9 +56,18 @@ function migrateProject(P) {
   if (!P.v || P.v < 3) P.v = 3;
   return P;
 }
+/* volume changes through the song: a level in dB for a part in one part of the form (-60 or less = silent) */
+const cleanLevels = lv => {
+  if (!lv || typeof lv !== 'object') return null;
+  const o = {}; Object.keys(lv).slice(0, 20).forEach(k => { if (/^(chords|bass|drums|melody|choir|loops|tk[A-Za-z0-9_-]{0,20})$/.test(k) && Number.isFinite(+lv[k]) && Math.round(+lv[k]) !== 0) o[k] = Math.max(-60, Math.min(9, Math.round(+lv[k]))); });
+  return Object.keys(o).length ? o : null;
+};
+const levelGain = db => (db <= -59 ? 0 : Math.pow(10, db / 20));
 function formItem(i) {
-  return { s: i.s, up: Math.max(-6, Math.min(11, Math.round(+i.up || 0))), x: Math.max(1, Math.min(8, Math.round(+i.x || 1))), tag: Math.max(0, Math.min(8, Math.round(+i.tag || 0))),
+  const o = { s: i.s, up: Math.max(-6, Math.min(11, Math.round(+i.up || 0))), x: Math.max(1, Math.min(8, Math.round(+i.x || 1))), tag: Math.max(0, Math.min(8, Math.round(+i.tag || 0))),
     stop: i.stop === true, vamp: i.vamp === true, en: ['soft', 'full'].includes(i.en) ? i.en : '', lead: i.lead !== false, fill: i.fill === true, fk: FILL_KINDS[i.fk] ? i.fk : '', swell: i.swell === true };
+  const lv = cleanLevels(i.lv); if (lv) o.lv = lv;
+  return o;
 }
 /* keep the older fields in step (lessons, the Songbook lead sheet and older backups read them) */
 function syncLegacy(P) {
@@ -132,6 +155,17 @@ function bassEvents(ch, v, next, t0, dur, style, meter, vel) {
     add(t0, (appr ? dur - 0.5 : dur) * (dur >= 3 ? 0.5 : 0.95), [root]);
     if (dur >= 3) add(t0 + dur / 2, (appr ? dur / 2 - 0.5 : dur / 2) * 0.95, [octOf(root)]);
     if (appr) add(t0 + dur - 0.5, 0.45, [fitBass(nextRoot + (nextRoot > root ? -1 : 1))]);
+  } else if (BASS_PATTERNS[style] && meter.bar === 4) {
+    const th = ch.pcs[1], thUp = ((th - (root % 12)) + 12) % 12;
+    for (let b = 0; b < dur - 1e-6; b += 4) BASS_PATTERNS[style].forEach(([o, d, iv]) => {
+      if (b + o >= dur - 1e-6) return;
+      const last = b + 4 >= dur - 1e-6 && next && next.bass !== root;
+      const m = iv === 'n' ? (last ? fitBass(nextRoot + (nextRoot > root ? -1 : 1)) : root + 7 > 52 ? root - 5 : root + 7) : iv === 'th' ? root + thUp : root + iv > 52 ? root + iv - 12 : root + iv;
+      add(t0 + b + o, Math.min(d, dur - b - o), [fitBass(m)]);
+    });
+  } else if (style === 'worship' && dur >= 2) {
+    add(t0, dur * 0.97, [root]);
+    if (dur >= 4) add(t0 + 2, Math.min(dur - 2, 1.8), [fitBass(root + 7)]);
   } else if (style === 'pump') {
     for (let b = 0; b < dur - 1e-6; b += 0.5) add(t0 + b, Math.min(0.42, dur - b), [Math.round(b * 2) % 2 ? octOf(root) : root]);
   } else if (style === 'makossa') {
@@ -142,11 +176,51 @@ function bassEvents(ch, v, next, t0, dur, style, meter, vel) {
   else add(t0, dur * 0.97, [root]);
   return out;
 }
+/* a human feel for the keys and the bass (the same every time it plays, so a mix and its export match; the MIDI file stays exact):
+   chords are rolled a few milliseconds from the bottom note up, every note lands a little early or late, and the touch varies.
+   level 1 = light, 2 = loose. The melody and the choir are left exactly as written. */
+function humanizeKeys(ev, level, bpm) {
+  level = Math.max(0, Math.min(2, Math.round(+level || 0))); if (!level || !ev.length) return ev;
+  const ms = level === 1 ? 7 : 14, vv = level === 1 ? 0.07 : 0.14, rollMs = level === 1 ? 14 : 28, beat = 60000 / (bpm || 100);
+  const h = (a, b) => { let x = (Math.round(a * 1000) * 2654435761 + b * 40503) >>> 0; x ^= x >>> 15; x = Math.imul(x, 2246822519) >>> 0; x ^= x >>> 13; return (x >>> 0) / 4294967295 * 2 - 1; };
+  const out = [];
+  ev.forEach(e => {
+    if (!e.notes || e.drum || e.click || e.loop || e.mel || e.choir) { out.push(e); return; }
+    const bass = e.part === 'bass', code = bass ? 11 : 3, dt = h(e.t, code) * ms / beat, vel = Math.max(0.05, Math.min(1, (e.vel || 0.7) * (1 + h(e.t + 0.37, code + 7) * vv)));
+    const notes = e.notes.slice().sort((a, b) => a - b);
+    if (bass || notes.length < 2) { out.push(Object.assign({}, e, { t: Math.max(0, e.t + dt), vel })); return; }
+    const gap = rollMs / beat / (notes.length - 1);
+    notes.forEach((m, j) => out.push(Object.assign({}, e, { notes: [m], t: Math.max(0, e.t + dt + j * gap), vel: Math.max(0.05, Math.min(1, vel * (1 + h(e.t + j, code + 13) * vv * 0.5))) })));
+  });
+  return out;
+}
 /* ---- the drums: the 4/4 grooves from the engine, and patterns for 3/4 and 6/8 ---- */
 const METER_DRUMS = {
   3: { label: 'Waltz', k: [0], s: [1, 2], h: [0, 1, 2], sv: 0.45 },
   6: { label: '6/8 groove', k: [0], s: [1.5], h: [0, 0.5, 1, 1.5, 2, 2.5], sv: 0.8 }
 };
+/* the drummer's busyness: -1 calmer (hi-hats on the beat only, no ghost notes), 0 as written, 1 busier (every sixteenth or triplet on the hi-hat, soft ghost snares before the backbeat) */
+function busyDrums(ev, P) {
+  const busy = P.busy | 0; if (!busy || !ev.length) return ev;
+  if (busy < 0) return ev.filter(e => !(e.drum === 'h' && Math.abs(e.t - Math.round(e.t)) > 0.01) && !(e.drum === 's' && e.vel < 0.3));
+  const b = P.ts === 4 ? E.BEATS[P.beat] : null, n = b && b.n, step = n === 12 ? 1 / 3 : 0.25, out = ev.slice(), has = (t, d) => ev.some(e => e.drum === d && Math.abs(e.t - t) < 0.02);
+  const end = Math.max(0, ...ev.map(e => e.t)) + 0.01;
+  if (P.ts === 4 && (n === 16 || n === 12) && ev.some(e => e.drum === 'h')) for (let t = 0; t < end; t += step) if (!has(t, 'h') && !has(t, 'o')) out.push({ t, d: 0.1, drum: 'h', vel: 0.2 });
+  ev.filter(e => e.drum === 's' && e.vel >= 0.5).forEach(e => { const t = e.t - step; if (t >= 0 && !has(t, 's') && !has(t, 'k') && (e.t * 2) % 2 === 0) out.push({ t, d: 0.1, drum: 's', vel: 0.2 }); });
+  return out;
+}
+/* a percussion layer on top of the beat: a shaker, a tambourine and/or congas (they also play when the song has no drums) */
+function percEvents(P, beats, energy) {
+  const kind = P.perc || 'off'; if (kind === 'off') return [];
+  const ev = [], bar = meterOf(P).bar, third = P.ts === 4 && E.BEATS[P.beat] && E.BEATS[P.beat].n === 12;
+  const shaker = /shaker/.test(kind), tamb = kind === 'tambourine', cong = /congas/.test(kind) && P.ts === 4;
+  for (let b0 = 0; b0 < beats - 1e-6; b0 += bar) {
+    if (shaker) { const st = P.ts === 4 ? (third ? 1 / 3 : 0.25) : 0.5; for (let t = 0; t < bar - 1e-6; t += st) ev.push({ t: b0 + t, d: 0.08, drum: 'sh', vel: Math.abs(t - Math.round(t)) < 0.01 ? 0.34 : 0.2 }); }
+    if (tamb) { for (let t = 0; t < bar - 1e-6; t += 0.5) { const on = P.ts === 4 ? (t === 1 || t === 3) : Math.abs(t - Math.round(t)) < 0.01; ev.push({ t: b0 + t, d: 0.1, drum: 'tb', vel: on ? 0.55 : 0.2 }); } }
+    if (cong) [[0.5, 'cd', 0.45], [1.5, 'cg', 0.5], [2, 'cg', 0.55], [2.5, 'cg', 0.45], [3.5, 'cd', 0.5]].forEach(x => ev.push({ t: b0 + x[0], d: 0.15, drum: x[1], vel: x[2] }));
+  }
+  return E.humanizeDrums(ev, P.human, P.bpm).filter(e => e.t < beats - 0.001).map(e => Object.assign({}, e, { vel: e.vel * (0.6 + 0.4 * energy) }));
+}
 function drumEvents(P, beats, energy) {
   if (!P.beat || P.beat === 'none') return [];
   const light = energy < 0.7;
@@ -160,11 +234,18 @@ function drumEvents(P, beats, energy) {
       pat.h.forEach(o => ev.push({ t: b + o, d: 0.1, drum: 'h', vel: o % 1 ? 0.32 : 0.45 }));
     }
   }
+  ev = busyDrums(ev, P);
   ev = E.humanizeDrums(ev, P.human, P.bpm);
   return ev.filter(e => e.t < beats - 0.001 && !(light && (e.drum === 's' || e.drum === 'cl'))).map(e => Object.assign({}, e, { vel: (e.vel || 0.6) * (0.55 + 0.45 * energy) }));
 }
-const DRUM_MIDI = { k: 36, s: 38, h: 42, o: 46, r: 37, cl: 39, c: 49, th: 50, tm: 47, tl: 43, sw: 52 };
+const DRUM_MIDI = { k: 36, s: 38, h: 42, o: 46, r: 37, cl: 39, c: 49, th: 50, tm: 47, tl: 43, sw: 52, sh: 82, tb: 54, cg: 63, cd: 64 };
 
+/* the automatic version of one part of a section, as notes you can edit by hand (the key of the song, no key change) */
+function autoPart(P, type, part) {
+  const Q = Object.assign({}, P, { edits: undefined, perc: 'off', mixer: undefined }), a = arrangeSection(Q, type, { melody: false, choir: false, melInst: 'piano' });
+  if (part === 'bass') return a.events.filter(e => e.part === 'bass' && e.notes).map(e => ({ t: Math.round(e.t * 4) / 4, d: Math.max(0.25, Math.round(e.d * 4) / 4), m: e.notes[0], v: Math.round(Math.min(1, e.vel) * 100) / 100 }));
+  return a.events.filter(e => e.drum && ['k', 's', 'h', 'o', 'cl', 'r', 'tm', 'c'].indexOf(e.drum) >= 0).map(e => ({ t: Math.round(e.t * 4) / 4, d: 0.1, drum: e.drum, v: Math.round(Math.min(1, e.vel || 0.8) * 100) / 100 }));
+}
 /* ---- one pass of a section, starting at beat 0 ----
    o: { shift (key change in semitones), energy, stop (the band stops on beat 1 of the last bar), chords and notes
         (overrides, for tags and lead-ins), melody: false, melInst, choir: true, focus ('soprano'|'alto'|'tenor') } */
@@ -178,22 +259,35 @@ function arrangeSection(P, type, o) {
   const trim = e => { if (o.stop) { if (e.t < lastBar - 1e-6 && e.t + e.d > lastBar) e.d = lastBar - e.t; if (Math.abs(e.t - lastBar) < 1e-6) e.d = Math.min(e.d, 0.6); } return e; };
   const bk = o.focus ? 0.55 : 1;
   compEvents(sc, P.style || 'whole', meter, vel * bk).filter(keep).map(trim).forEach(e => { events.push(e); e.notes.forEach(m => parts.chords.push({ t: e.t, d: e.d, m, v: Math.round(Math.min(1, e.vel) * 110) })); });
-  sc.chs.forEach((ch, i) => {
-    bassEvents(sc.voiced[i], sc.voiced[i], sc.voiced[i + 1] || null, ch.t, ch.d, P.bassStyle || 'root', meter, vel * bk).filter(keep).map(trim).forEach(e => { e.part = 'bass'; events.push(e); e.notes.forEach(m => parts.bass.push({ t: e.t, d: e.d, m, v: Math.round(Math.min(1, e.vel) * 110) })); });
+  const hand = (!o.chords || o.chords === sectionOf(P, type).chords) && !o.tagPass && P.edits ? P.edits : null, edB = hand && hand.bass && hand.bass[type], edD = hand && hand.drums && hand.drums[type];
+  if (edB) edB.filter(n => n.t < beats - 1e-6).forEach(n => {   // a bass line drawn by hand plays exactly as drawn (moved with the key change)
+    let m = n.m + shift; while (m > 55) m -= 12; while (m < 24) m += 12;
+    const e = { t: n.t, d: Math.min(n.d, beats - n.t), notes: [m], vel: (n.v || 0.8) * bk };
+    if (!keep(e)) return; trim(e); e.part = 'bass'; if (P.bassSound && P.bassSound !== 'finger' && BASS_SOUNDS[P.bassSound]) e.bassIns = 'bass_' + P.bassSound;
+    events.push(e); parts.bass.push({ t: e.t, d: e.d, m, v: Math.round(Math.min(1, e.vel) * 110) });
+  });
+  if (!edB) sc.chs.forEach((ch, i) => {
+    bassEvents(sc.voiced[i], sc.voiced[i], sc.voiced[i + 1] || null, ch.t, ch.d, P.bassStyle || 'root', meter, vel * bk).filter(keep).map(trim).forEach(e => { e.part = 'bass'; if (P.bassSound && P.bassSound !== 'finger' && BASS_SOUNDS[P.bassSound]) e.bassIns = 'bass_' + P.bassSound; events.push(e); e.notes.forEach(m => parts.bass.push({ t: e.t, d: e.d, m, v: Math.round(Math.min(1, e.vel) * 110) })); });
   });
   if (o.stop && !sc.chs.some(ch => Math.abs(ch.t - lastBar) < 1e-6)) {   // the band hits beat 1 of the last bar together
     const i = chordAtBeat(sc, lastBar), v = sc.voiced[i];
     events.push({ t: lastBar, d: 0.6, notes: v.rh, vel }); events.push({ t: lastBar, d: 0.6, notes: [v.bass], vel, part: 'bass' });
     v.rh.forEach(m => parts.chords.push({ t: lastBar, d: 0.6, m, v: 90 })); parts.bass.push({ t: lastBar, d: 0.6, m: v.bass, v: 90 });
   }
-  let dr = drumEvents(P, beats, energy);
+  let dr = edD ? edD.filter(e => e.t < beats - 1e-6).map(e => ({ t: e.t, d: 0.1, drum: e.drum, vel: e.v || 0.8 })) : drumEvents(P, beats, energy);
   if (dr.length) {
-    if (energy >= 0.9 && !o.tagPass) dr.push({ t: 0, d: 0.1, drum: 'c', vel: 0.7 });
-    sc.chs.forEach((ch, i) => { if (ch.spec.push && i > 0) { dr = dr.filter(e => Math.abs(e.t - ch.t) > 0.01 || e.drum === 'h'); dr.push({ t: ch.t, d: 0.1, drum: 'k', vel: 0.85 }); if (energy >= 0.8) dr.push({ t: ch.t, d: 0.1, drum: 'c', vel: 0.6 }); } });
+    if (!edD && energy >= 0.9 && !o.tagPass) dr.push({ t: 0, d: 0.1, drum: 'c', vel: 0.7 });
+    if (!edD) sc.chs.forEach((ch, i) => { if (ch.spec.push && i > 0) { dr = dr.filter(e => Math.abs(e.t - ch.t) > 0.01 || e.drum === 'h'); dr.push({ t: ch.t, d: 0.1, drum: 'k', vel: 0.85 }); if (energy >= 0.8) dr.push({ t: ch.t, d: 0.1, drum: 'c', vel: 0.6 }); } });
     if (o.stop) { dr = dr.filter(e => e.t < lastBar - 1e-6); dr.push({ t: lastBar, d: 0.1, drum: 'k', vel: 0.95 }, { t: lastBar, d: 0.1, drum: 'c', vel: 0.8 }); }
-    else if (o.fill) { const f = fillEvents(beats, meter.bar, energy, o.fk); dr = dr.filter(e => e.t < f.from - 1e-6 || e.drum === 'h' && false).concat(f.ev); }
-    if (o.crashIn && !dr.some(e => e.drum === 'c' && e.t < 0.01)) dr.push({ t: 0, d: 0.1, drum: 'c', vel: 0.75 });
+    else if (o.fill && !edD) { const f = fillEvents(beats, meter.bar, energy, o.fk); dr = dr.filter(e => e.t < f.from - 1e-6 || e.drum === 'h' && false).concat(f.ev); }
+    if (o.crashIn && !edD && !dr.some(e => e.drum === 'c' && e.t < 0.01)) dr.push({ t: 0, d: 0.1, drum: 'c', vel: 0.75 });
     dr.forEach(e => { e.vel *= bk; events.push(e); parts.drums.push({ t: e.t, d: 0.25, m: DRUM_MIDI[e.drum] || 38, v: Math.round(40 + Math.min(1, e.vel) * 80) }); });
+  }
+  let pc = percEvents(P, beats, energy);
+  if (pc.length) {
+    if (o.stop) pc = pc.filter(e => e.t < lastBar - 1e-6);
+    else if (o.fill) { const f = fillEvents(beats, meter.bar, energy, o.fk); pc = pc.filter(e => e.t < f.from - 1e-6); }
+    pc.forEach(e => { e.vel *= bk; events.push(e); parts.drums.push({ t: e.t, d: 0.25, m: DRUM_MIDI[e.drum] || 54, v: Math.round(40 + Math.min(1, e.vel) * 80) }); });
   }
   if (o.swell && !o.stop) { const len = Math.min(beats, meter.bar === 4 ? 2 : meter.bar); events.push({ t: beats - len, d: len, drum: 'sw', vel: 0.8 * bk }); parts.drums.push({ t: beats - len, d: len, m: 52, v: 70 }); }
   const mel = o.notes || (P.melodies[type] && P.melodies[type].notes) || [];
@@ -238,7 +332,7 @@ function arrangeSong(P, o) {
   let at = 0;
   const place = (a, label, item, idx) => {
     timeline.push({ type: item.s, label, start: at, beats: a.beats, chs: a.chs.map(c => Object.assign({}, c, { t: c.t + at })), key: a.key, idx });
-    a.events.forEach(e => events.push(Object.assign({}, e, { t: e.t + at })));
+    a.events.forEach(e => { const o2 = Object.assign({}, e, { t: e.t + at }); const db = item.lv ? item.lv[Snd.partOf(e)] : 0; if (db) o2.gx = levelGain(db); events.push(o2); });
     Object.keys(parts).forEach(k => a.parts[k].forEach(n => parts[k].push(Object.assign({}, n, { t: n.t + at }))));
     at += a.beats;
   };
@@ -246,7 +340,8 @@ function arrangeSong(P, o) {
   form.forEach((it, idx) => {
     const next = form[idx + 1], sec = P.sections[it.s], energy = ENERGY_SET[it.en] || ENERGY[it.s] || 0.8;
     const base = { shift: it.up, energy, melody: o.melody, melInst: o.melInst, choir: o.choir !== undefined ? o.choir : !!(P.choir && P.choir.on), focus: o.focus };
-    const touches = last => ({ fill: last && it.fill && !it.stop, fk: it.fk, swell: last && it.swell && !it.stop });
+    const autoF = !!P.autoFill && !!next && next.s !== it.s && !it.stop, anyFill = !!it.fill || autoF;
+    const touches = last => ({ fill: last && anyFill && !it.stop, fk: it.fk, swell: last && it.swell && !it.stop });
     const lead = next && next.up !== it.up && next.lead !== false ? SC.mod(next.up + 7 - it.up) : null;
     markers.push({ t: at, text: itemLabel(it, P) });
     for (let k = 0; k < it.x; k++) {
@@ -258,7 +353,7 @@ function arrangeSong(P, o) {
       const chords = last && lead !== null ? withLeadIn(sl.chords, lead) : sl.chords;
       place(arrangeSection(P, it.s, Object.assign({}, base, { chords, notes: sl.notes, stop: last && it.stop, tagPass: true }, touches(last))), it.s + ' tag ' + (k + 1), it, idx);
     }
-    crashIn = !!it.fill;
+    crashIn = anyFill;
   });
   // the ending
   const endKind = ENDINGS[P.ending] ? P.ending : 'none', bars = meterOf(P).bar;
@@ -292,7 +387,7 @@ function arrangeSong(P, o) {
   void bar;
   const segs = timeline.map(t => ({ type: t.type, start: t.start, beats: t.beats, up: form[t.idx] ? form[t.idx].up : 0 }));
   midiLoopEvents(P, segs).forEach(e => { events.push(e); if (e.drum) parts.drums.push({ t: e.t, d: 0.25, m: DRUM_MIDI[e.drum] || 38, v: Math.round(40 + e.vel * 80) }); else (parts.loops = parts.loops || []).push({ t: e.t, d: e.d, m: e.notes[0], v: Math.round(e.vel * 110) }); });
-  const evs = mixFilter(P, events), mix = partsMix(P);
+  const evs = mixFilter(P, humanizeKeys(events, P.humanKeys, P.bpm)), mix = partsMix(P);
   // a slowdown: loops and beats play up to it as they are; from there each one's last two bars are stretched more and
   // more (pitch kept), in step with the band (see loopAudio)
   let places = loopPlacements(P, segs);
@@ -303,7 +398,7 @@ function arrangeSong(P, o) {
     Object.keys(tails).forEach(id => places.push({ L: tails[id][0].L, tail: true, src: tails[id], rit, at: rit.from, dur: rit.span * (1 + rit.slow / 2) + 0.5, shift: 0, offset: 0 }));
   }
   const lv = mix.loops.v; places.forEach(p => { p.mixGain = lv; p.pan = mix.loops.pan; });
-  return { events: evs, parts, timeline, markers, total: at, bpm: P.bpm, places, ritard: rit, script: { events: evs, bpm: P.bpm, total: at, mix, fade } };
+  return { events: evs, parts, timeline, markers, total: at, bpm: P.bpm, places, ritard: rit, script: { events: evs, bpm: P.bpm, total: at, mix, fade, kit: P.kit || 0 } };
 }
 
 /* ---- loops and beats ----
@@ -400,12 +495,31 @@ function midiLoopEvents(P, segs) {
   return ev;
 }
 /* resolve the audio of every placement (stretching what is needed), for a script */
+/* the parts of the form with their level changes (null when the song has none) */
+function levelSegments(P) {
+  if (!formOf(P).some(i => i.lv)) return null;
+  const form = formOf(P), A = arrangeSong(P, { melody: false, choir: false }), segs = A.timeline.map(t => ({ s0: t.start, s1: t.start + t.beats, lv: (form[t.idx] || {}).lv || null }));
+  if (segs.length) { segs[0].s0 = -Infinity; segs[segs.length - 1].s1 = Infinity; }
+  return segs;
+}
+/* one recorded clip cut at the parts of the form, each piece with its own gain (they share the same audio) */
+function splitByLevels(clip, key, segs, spb) {
+  if (!segs || !segs.some(s => s.lv && s.lv[key])) return [clip];
+  const out = [], end = clip.at + clip.dur;
+  segs.forEach(s => {
+    const a = Math.max(clip.at, s.s0), b = Math.min(end, s.s1); if (b - a <= 0.01) return;
+    const db = s.lv && s.lv[key] ? s.lv[key] : 0;
+    out.push(Object.assign({}, clip, { at: a, offset: (clip.offset || 0) + (a - clip.at) * spb, dur: b - a, gain: (clip.gain == null ? 1 : clip.gain) * (db ? levelGain(db) : 1) }));
+  });
+  return out.length ? out : [clip];
+}
 async function loopAudio(P, places) {
   const out = [];
   for (const p of places) {
     if (p.tail) { const tb = await ritardTail(P, p).catch(() => null); if (tb) out.push({ buf: tb, at: p.at, dur: tb.duration / (60 / P.bpm), offset: 0, gain: (p.L.gain == null ? 1 : p.L.gain) * (p.mixGain == null ? 1 : p.mixGain), pan: p.pan || 0, loop: p.L.id }); continue; }
     const buf = await loopAt(P, p.L, p.shift).catch(() => null); if (buf) out.push({ buf, at: p.at, dur: p.dur, offset: p.offset, gain: (p.L.gain == null ? 1 : p.L.gain) * (p.mixGain == null ? 1 : p.mixGain), pan: p.pan || 0, loop: p.L.id }); }
-  return out;
+  const segs = levelSegments(P), spb = 60 / P.bpm;
+  return segs ? out.reduce((acc, c) => acc.concat(splitByLevels(c, 'loops', segs, spb)), []) : out;
 }
 /* the last two bars of a loop or beat, slowing down with the band: what it would have played there, put together from
    its placements, then stretched more and more (the same curve as the band: each beat up to 1.67 times longer) */
@@ -431,12 +545,14 @@ const MIX_PARTS = { chords: 'Keyboard chords', bass: 'Bass', drums: 'Drums', mel
 function mixerOf(P) {
   const m = P.mixer = P.mixer && typeof P.mixer === 'object' ? P.mixer : {};
   if (P.mix) { Object.keys(P.mix).forEach(k => { if (P.mix[k] === false) (m[k] = m[k] || {}).mute = true; }); delete P.mix; }   // the 2.9 on/off switches
-  Object.keys(MIX_PARTS).forEach(k => { const c = m[k] = m[k] || {}; if (c.v == null) c.v = 1; if (!c.pan) c.pan = 0; });
+  Object.keys(MIX_PARTS).forEach(k => { const c = m[k] = m[k] || {}; if (c.v == null) c.v = 1; if (!c.pan) c.pan = 0; ['tone', 'comp', 'room', 'lc', 'el', 'em', 'eh', 'duck'].forEach(f => { if (typeof c[f] !== 'number') c[f] = 0; }); if (typeof c.ef !== 'number') c.ef = 1000; });
   return m;
 }
 const anySolo = P => { const m = mixerOf(P); return Object.keys(MIX_PARTS).some(k => m[k].solo) || recordedTracks(P).some(r => r.T.solo); };
 const audible = (P, ch) => !ch.mute && (!anySolo(P) || !!ch.solo);
-function partsMix(P) { const m = mixerOf(P), out = {}; Object.keys(MIX_PARTS).forEach(k => { out[k] = { v: audible(P, m[k]) ? m[k].v : 0, pan: m[k].pan }; }); return out; }
+/* the sound of one part for the audio engine: volume, place, and (only when used) tone, evening-out and extra room */
+const partFx = (c, v) => { const o = { v, pan: c.pan }; if (c.tone) o.tone = c.tone; if (c.comp) o.comp = c.comp; if (c.room) o.room = c.room; if (c.lc) o.lc = c.lc; if (c.el) o.el = c.el; if (c.em) { o.em = c.em; o.ef = c.ef || 1000; } if (c.eh) o.eh = c.eh; if (c.duck) o.duck = c.duck; return o; };
+function partsMix(P) { const m = mixerOf(P), out = {}; Object.keys(MIX_PARTS).forEach(k => { out[k] = partFx(m[k], audible(P, m[k]) ? m[k].v : 0); }); return out; }
 function mixFilter(P, events) {   // muted parts are not played at all (and not written to the MIDI file)
   const m = mixerOf(P), off = k => !audible(P, m[k]);
   return events.filter(e => { if (e.click) return true; const k = Snd.partOf ? Snd.partOf(e) : 'chords'; return k === 'click' || !off(k); });
@@ -444,15 +560,16 @@ function mixFilter(P, events) {   // muted parts are not played at all (and not 
 /* the recorded tracks as audio clips for a script: [{ buf, at, dur, offset, gain, pan }] */
 async function recordedAudio(P, o) {
   o = o || {};
-  const spb = 60 / P.bpm, out = [], light = o.live && lowMem(P);
+  const spb = 60 / P.bpm, out = [], light = o.live && lowMem(P), segs = levelSegments(P);
   for (const r of recordedTracks(P)) {
     if (o.exclude && r.T === o.exclude) continue;
     if (o.only !== undefined && o.only !== r.id) continue;
     if (o.only === undefined && !audible(P, r.T)) continue;
     const buf = await GuideStore.trackBuffer(P, r.T, { light, noCache: o.noCache }).catch(() => null); if (!buf) continue;
     const nudge = (r.T.nudgeMs || 0) / 1000;
-    out.push({ buf, at: nudge > 0 ? nudge / spb : 0, offset: nudge < 0 ? -nudge : 0, dur: buf.duration / spb + 1, gain: r.T.gain == null ? 1 : r.T.gain, pan: r.T.pan || 0, track: r.id,
-      chain: light && r.T.fx.preset !== 'off' ? r.T.fx.preset : null, room: r.T.fx.reverb !== false });
+    const clip = { buf, at: nudge > 0 ? nudge / spb : 0, offset: nudge < 0 ? -nudge : 0, dur: buf.duration / spb + 1, gain: r.T.gain == null ? 1 : r.T.gain, pan: r.T.pan || 0, track: r.id,
+      chain: light && r.T.fx.preset !== 'off' ? r.T.fx.preset : null, room: r.T.fx.reverb !== false };
+    splitByLevels(clip, 'tk' + (r.id || ''), segs, spb).forEach(c => out.push(c));
   }
   return out;
 }
@@ -715,7 +832,7 @@ async function renderSong(P, opts) {
     const mix = mixerOf(P), keep = e => !e.click && (only.part ? Snd.partOf(e) === only.part && !(only.part === 'loops' && false) : only.loop ? e.loop === only.loop : false);
     const all = arrangeSong(Object.assign({}, P, { mixer: Object.assign({}, mix, Object.keys(MIX_PARTS).reduce((o, k) => { o[k] = Object.assign({}, mix[k], { mute: false, solo: false }); return o; }, {})) }), { melody: true, melInst: Snd.inst() });
     script.events = all.events.filter(keep);
-    script.mix = Object.keys(MIX_PARTS).reduce((o, k) => { o[k] = { v: mix[k].v, pan: mix[k].pan }; return o; }, {});
+    script.mix = Object.keys(MIX_PARTS).reduce((o, k) => { o[k] = partFx(mix[k], mix[k].v); return o; }, {});
     script.audio = [];
     if (only.part === 'loops' || only.loop) script.audio = (await loopAudio(P, all.places)).filter(a => !only.loop || a.loop === only.loop);
     if (only.track !== undefined) script.audio = await recordedAudio(P, { only: only.track, noCache: lowMem(P) });
@@ -769,6 +886,49 @@ async function exportSong(P, opts) {
   saveFile(name, fmtx === 'mp3' ? 'audio/mpeg' : 'audio/wav', data);
   return { name, seconds, bytes: data.length, master: m.info };
 }
+/* ---- release: measure the finished song the way a streaming service will, and make the release files ---- */
+function measureChannels(chs, sr) {
+  const n = chs[0].length, thr = Math.pow(10, -50 / 20); let pk = 0, clipped = 0, first = -1, last = -1;
+  for (let c = 0; c < chs.length; c++) { const d = chs[c];
+    for (let i = 0; i < n; i++) { const a = d[i] < 0 ? -d[i] : d[i]; if (a > pk) pk = a; if (a >= 0.999) clipped++; if (a > thr) { if (first < 0 || i < first) first = i; if (i > last) last = i; } } }
+  return { seconds: n / sr, rawPeakDb: 20 * Math.log10(Math.max(1e-9, pk)), clipped, headSec: first < 0 ? n / sr : first / sr, tailSec: last < 0 ? 0 : (n - 1 - last) / sr };
+}
+async function releaseMake(P, keep) {
+  let raw = await renderSong(P, { melody: true });
+  const sr = raw.sampleRate, ch = []; for (let i = 0; i < raw.numberOfChannels; i++) ch.push(raw.getChannelData(i));
+  const f = measureChannels(ch, sr); f.sampleRate = sr; ch.length = 0;
+  const src = { buf: raw }; raw = null;
+  const m = await masterBuffer(P, src);
+  if (m.info) Object.assign(f, { before: m.info.before, lufs: m.info.lufs, tp: m.info.tp, target: m.info.target }); else Object.assign(f, { target: 'off', lufs: 0, tp: -99 });
+  if (!keep) { m.buf = null; return { facts: f }; }
+  return { facts: f, buf: m.buf };
+}
+async function releaseCheck(P) { const r = await releaseMake(P, false); return { facts: r.facts, notes: Mastering.releaseNotes(r.facts) }; }
+/* one ZIP for a distributor: 16-bit WAV (what DistroKid, TuneCore and CD Baby accept), the MP3, and a note of the numbers */
+async function exportRelease(P, onProgress) {
+  const name = songSlug(P) + '_release_' + P.bpm + 'bpm.zip';
+  const sink = await openSaveSink(name, 'application/zip'); if (!sink) return { canceled: true };
+  try {
+    if (onProgress) onProgress('Mixing and mastering');
+    const r = await releaseMake(P, true), meta = songMeta(P), notes = Mastering.releaseNotes(r.facts), base = songSlug(P);
+    const zw = zipWriter(sink), files = [];
+    if (onProgress) onProgress('Making the WAV');
+    let wav = encodeWav(r.buf, 16, meta); const wf = base + '.wav'; await zw.add(wf, sink.disk ? wav : new Blob([wav]), crc32(wav)); files.push(wf); wav = null;
+    if (onProgress) onProgress('Making the MP3');
+    let mp3 = null; try { mp3 = await encodeMp3(r.buf, 192, meta); } catch (e) { mp3 = null; }
+    if (mp3) { const mf = base + '.mp3'; await zw.add(mf, sink.disk ? mp3 : new Blob([mp3]), crc32(mp3)); files.push(mf); }
+    const mark = { ok: '[OK]  ', warn: '[CHECK]', bad: '[FIX]  ' };
+    const readme = ['Release files for "' + meta.title + '"' + (meta.artist ? ' by ' + meta.artist : ''),
+      'Tempo: ' + P.bpm + ' BPM · Key: ' + P.key, '',
+      'Files: ' + files.join(', '), 'The WAV is 16-bit, ' + r.facts.sampleRate + ' Hz, stereo: upload this one to your distributor (DistroKid, TuneCore, CD Baby…). The MP3 is for WhatsApp and sharing.',
+      mp3 ? '' : 'The MP3 was not made (the MP3 maker is missing in this copy of the app); use the WAV.', '',
+      'What the check found:'].concat(notes.map(x => mark[x.level] + ' ' + x.title + ': ' + x.text)).concat(['', copyrightLine(P), 'Made in Gospel Music Academy.']).filter(x => x !== undefined).join('\r\n');
+    await zw.add('README.txt', new TextEncoder().encode(readme));
+    await zw.finish();
+    const done = await sink.close(true);
+    return { name: done.name, bytes: done.bytes, facts: r.facts, notes, mp3: !!mp3 };
+  } catch (e) { await sink.close(false).catch(() => {}); throw e; }
+}
 async function exportSongWav(P, opts) { return exportSong(P, Object.assign({ format: 'wav' }, opts || {})); }
 /* every part and track on its own, as 24-bit WAVs of the same length, in one ZIP */
 function stemList(P) {
@@ -813,6 +973,7 @@ function normTrack(g) {
   if (!(g.main >= 0 && g.main < g.takes.length)) g.main = Math.max(0, g.takes.length - 1);
   g.comp = g.comp && typeof g.comp === 'object' ? g.comp : {};
   g.fx = g.fx && VocalFX.PRESETS[g.fx.preset] ? g.fx : { preset: 'off', nr: 'preset' };
+  if (!g.fx.tune) g.fx.tune = 'off';
   if (g.gain == null) g.gain = 1; if (!g.pan) g.pan = 0;
   // edits that never change the recording itself: parts silenced (mutes) and parts sung again (patches), in seconds of the take
   g.mutes = Array.isArray(g.mutes) ? g.mutes : []; g.patches = Array.isArray(g.patches) ? g.patches : [];
@@ -845,7 +1006,10 @@ const GuideStore = (function () {
     const c = Snd.ensure(); if (!c) return null;
     const b = await c.decodeAudioData(await blob.arrayBuffer()); raw.set(k, b); return b;
   }
-  const sig = (P, g) => JSON.stringify([g.takes.map(t => t.k), g.main, g.comp, g.fx, P.bpm, P.ts, (P.form || []).length, GuideStore.profileStamp, g.mutes, g.patches]);
+  /* gentle pitch correction settings for a track (null = off): how much, and to which notes */
+  const TUNE_AMOUNT = { gentle: 0.5, medium: 0.75, full: 1 };
+  const tuneOf = (P, g) => { const a = TUNE_AMOUNT[g.fx && g.fx.tune]; if (!a || typeof PitchFix === 'undefined') return null; return { amount: a, pcs: g.fx.tuneScale === 'any' ? null : PitchFix.scalePcs(P.key, false) }; };
+  const sig = (P, g) => JSON.stringify([g.takes.map(t => t.k), g.main, g.comp, g.fx, P.bpm, P.ts, (P.form || []).length, GuideStore.profileStamp, g.mutes, g.patches, P.key]);
   const pending = new Map(), pk = new Map();   // pending: recordings to remove when you leave the song; pk: pictures of the sound
   return {
     profileStamp: 0,
@@ -905,13 +1069,14 @@ const GuideStore = (function () {
       const sr = E.sr, c = Snd.ensure(), pcm = E.pcm;
       let out;
       // memory saver: the takes joined (comped) but not processed, mono; the vocal sound is added while it plays
-      if (opts.light) { out = c.createBuffer(1, pcm.length, sr); out.getChannelData(0).set(pcm); g.takes.forEach(t => raw.delete(t.k)); (g.patches || []).forEach(p => raw.delete(p.k)); if (!opts.noCache) done.set(key, out); return out; }
+      const tune = tuneOf(P, g);
+      if (opts.light) { const lp = tune ? await VocalFX.chainAsync(pcm, sr, 'off', { tune }) : pcm; out = c.createBuffer(1, lp.length, sr); out.getChannelData(0).set(lp); g.takes.forEach(t => raw.delete(t.k)); (g.patches || []).forEach(p => raw.delete(p.k)); if (!opts.noCache) done.set(key, out); return out; }
       if (g.fx.preset && g.fx.preset !== 'off') {
         const nr = VocalFX.NR_LEVELS[g.fx.nr], prof = await this.profile().catch(() => null);
-        const y = await VocalFX.chainAsync(pcm, sr, g.fx.preset, { nr: nr === null || nr === undefined ? undefined : nr, profile: prof && prof.sr === sr ? prof : null });
+        const y = await VocalFX.chainAsync(pcm, sr, g.fx.preset, { nr: nr === null || nr === undefined ? undefined : nr, profile: prof && prof.sr === sr ? prof : null, tune });
         const r = await VocalFX.withRoom(y, sr, g.fx.reverb === false ? 'off' : g.fx.preset);
         out = c.createBuffer(r.channels.length, r.channels[0].length, sr); r.channels.forEach((d, i) => out.getChannelData(i).set(d));
-      } else { out = c.createBuffer(1, pcm.length, sr); out.getChannelData(0).set(pcm); }
+      } else { const y = tune ? await VocalFX.chainAsync(pcm, sr, 'off', { tune }) : pcm; out = c.createBuffer(1, y.length, sr); out.getChannelData(0).set(y); }
       // the unprocessed takes are not needed any more (they are read again from storage if wanted)
       g.takes.forEach(t => raw.delete(t.k)); (g.patches || []).forEach(p => raw.delete(p.k));
       [...done.keys()].filter(k => k.startsWith(P.id + ':' + (g.id || '') + '[')).forEach(k => done.delete(k));
@@ -1015,6 +1180,15 @@ function scriptFrom(script, from, to) {
   }).filter(a => a.dur > 0.01);
   out.total = Math.max(0.5, end - from);
   out.fade = script.fade && to === undefined ? { from: script.fade.from - from, to: script.fade.to - from } : null;
+  return out;
+}
+/* put bars of clicks in front of a script: everything moves later and the clicks fill the gap */
+function withCountIn(script, beats, bpb) {
+  const out = Object.assign({}, script);
+  out.events = script.events.map(e => Object.assign({}, e, { t: e.t + beats })).concat(Array.from({ length: beats }, (_, i) => ({ t: i, d: 0.2, click: i % bpb === 0 ? 2 : 1 })));
+  out.audio = (script.audio || []).map(a => Object.assign({}, a, { at: a.at + beats }));
+  out.total = script.total + beats;
+  out.fade = script.fade ? { from: script.fade.from + beats, to: script.fade.to + beats } : null;
   return out;
 }
 /* take the part a..b (seconds) out of a list of ranges: [{a,b}] */

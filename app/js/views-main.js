@@ -1,5 +1,18 @@
 'use strict';
 /* ---------------------------------------------------------------- HOME */
+/* the lesson path: the last lessons done, the one you are on and the ones coming, as steps along a line */
+function pathCard(nl) {
+  if (!nl || !C.order) return '';
+  const i = C.order.indexOf(nl); if (i < 0) return '';
+  const ids = C.order.slice(Math.max(0, i - 2), i + 5);
+  return '<section class="card"><div class="split"><h3>Your path</h3><button class="btn ghost sm" type="button" data-act="go" data-to="course">All lessons</button></div>' +
+    '<ol class="lpath" aria-label="Your next lessons">' + ids.map(id => {
+      const st = lessonStatus(id), cur = id === nl, un = isUnlocked(id), done = st === 'done' || st === 'mastered';
+      const cls = cur ? 'now' : done ? 'done' : un ? 'next' : 'locked';
+      return '<li class="' + cls + '"><span class="dot" aria-hidden="true">' + (done ? icon('check') : cur ? icon('play') : !un ? icon('lock') : '') + '</span>' +
+        '<button type="button" data-act="openlesson" data-id="' + id + '"' + (un ? '' : ' disabled') + '><b>' + esc(C.byId[id].title) + '</b><small>' + (cur ? 'You are here' : done ? 'Done' : un ? 'Up next' : 'Locked') + '</small></button></li>';
+    }).join('') + '</ol></section>';
+}
 function viewHome() {
   const t = ensureToday(), nl = nextLesson();
   const streak = E.streak(S.practice.days, t.date), rk = E.rankFor(S.xp);
@@ -33,6 +46,7 @@ function viewHome() {
     '<div class="stats"><span class="stat" title="Practice streak">' + icon('flame') + '<b>' + streak + '</b><small>day' + (streak === 1 ? '' : 's') + '</small></span><span class="stat" title="Your level">' + icon('star') + '<small>Level</small><b>' + rk.level + '</b><small>' + esc(rk.name) + '</small></span></div></div>' +
     whatsNewCard() + undoCard + (inst === 'guitar' ? guitarHero : (nl ? '<section class="card hero-card"><p class="eyebrow">Continue learning</p><h2>' + esc(C.byId[nl].title) + '</h2><p class="muted">' + esc(mod.title) + (lessonStatus(nl) === 'progress' ? ' · in progress' : '') + '</p><p>' + esc(C.byId[nl].why) + '</p><button class="btn primary lg" type="button" data-act="openlesson" data-id="' + nl + '">' + (lessonStatus(nl) === 'progress' ? 'Continue lesson' : 'Start lesson') + icon('chev') + '</button></section>'
       : '<section class="card hero-card"><p class="eyebrow">Course complete</p><h2>You have finished every lesson in this release.</h2><p>Keep your hands in shape with the Practice screen, and turn your chords into songs in the Song Lab.</p><div class="row wrap"><button class="btn primary" data-act="go" data-to="practice">Practice</button><button class="btn ghost" data-act="go" data-to="song">Song Lab</button></div></section>') + (inst === 'both' ? guitarHero : '')) +
+    (inst === 'guitar' ? '' : pathCard(nl)) +
     '<section class="card"><div class="split"><h3>Today’s practice</h3><span class="tiny">' + mins + ' of ' + goal + ' min</span></div>' + bar(Math.min(100, pct(mins, goal))) +
     '<ul class="todo">' + items.map(i => '<li class="' + (t.items[i.key] ? 'done' : '') + '"><span class="tick">' + (t.items[i.key] ? icon('check') : '') + '</span><div><b>' + esc(i.title) + '</b><span class="tiny">' + esc(i.sub) + '</span></div><button class="btn ghost sm" type="button" data-act="' + i.act + '" ' + i.attrs + '>' + (t.items[i.key] ? 'Again' : 'Start') + '</button></li>').join('') + '</ul>' +
     '<div class="week" aria-label="Last seven days">' + week.map(d => '<span class="day' + ((S.practice.days[d] || 0) >= 60 ? ' on' : '') + (d === t.date ? ' today' : '') + '" title="' + d + '"><i></i><small>' + ['S', 'M', 'T', 'W', 'T', 'F', 'S'][new Date(d + 'T12:00:00').getDay()] + '</small></span>').join('') + '</div></section>' +

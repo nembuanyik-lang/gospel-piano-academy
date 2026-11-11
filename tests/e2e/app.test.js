@@ -608,3 +608,27 @@ test('Piano Lab: 61 keys, no sheet music, and the chord detector follows the cho
   assert.equal(r.top, true); assert.equal(r.held, 'Dm');
   assert.deepEqual(errors, []);
 });
+
+test('stage mode: one button makes everything bigger and black and white, and it is saved and switched off again', async () => {
+  const { page, errors } = await open();
+  await page.evaluate(() => { window.__gpa.S().profile.onboarded = true; window.__gpa.go('song'); });
+  await page.click('#hst');
+  const on = await page.evaluate(() => [document.documentElement.dataset.stage, document.documentElement.style.zoom, getComputedStyle(document.body).backgroundColor, window.__gpa.S().prefs.stage]);
+  assert.deepEqual([on[0], on[1], on[2], on[3]], ['1', '1.2', 'rgb(0, 0, 0)', true]);
+  await page.evaluate(() => window.__gpa.go('profile', { tab: 'settings' }));
+  assert.ok(await page.locator('input[data-bind=pstage]').isChecked(), 'the setting shows it is on');
+  await page.click('#hst');
+  const off = await page.evaluate(() => [document.documentElement.dataset.stage || null, document.documentElement.style.zoom, window.__gpa.S().prefs.stage]);
+  assert.deepEqual(off, [null, '', false]);
+  assert.deepEqual(errors, []);
+});
+
+test('home: the lesson path shows where you are and what comes next', async () => {
+  const { page, errors } = await open();
+  await page.evaluate(() => { window.__gpa.S().profile.onboarded = true; window.__gpa.go('home'); });
+  await page.waitForSelector('.lpath');
+  assert.equal(await page.locator('.lpath li.now').count(), 1);
+  assert.ok(await page.locator('.lpath li').count() >= 3);
+  assert.ok(await page.locator('.lpath li.locked button[disabled]').count() >= 1, 'lessons not yet unlocked cannot be opened');
+  assert.deepEqual(errors, []);
+});

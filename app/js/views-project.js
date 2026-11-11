@@ -15,6 +15,21 @@ function secTabs(P, act) {
     return '<button type="button" role="tab" class="chip' + (t === cur ? ' on' : '') + '" aria-selected="' + (t === cur) + '" data-act="' + act + '" data-s="' + esc(t) + '">' + esc(t) + ' <small>' + n + (act === 'psecm' ? (mel ? ' · ♪' : '') : '') + (used ? '' : ' · not in song') + '</small></button>';
   }).join('') + '</div>';
 }
+/* ---- picture cards: a drum beat or an instrument, with a "hear it" button ---- */
+function beatDots(b) {
+  if (!b || !b.n) return '';
+  const row = keys => '<span class="bprow" style="--n:' + b.n + '">' + Array.from({ length: b.n }, (_, i) => '<i' + (keys.some(k => (b[k] || []).indexOf(i) >= 0) ? ' class="on"' : '') + '></i>').join('') + '</span>';
+  return '<span class="bpat" aria-hidden="true">' + row(['h', 'o']) + row(['s', 'cl', 'r', 'g']) + row(['k']) + '</span>';
+}
+function beatCard(k, label, cur) {
+  const on = k === cur, name = String(label).replace(/\s*\(.*$/, '');
+  return '<div class="pickcard' + (on ? ' on' : '') + '"><button type="button" class="pickmain" data-act="pbeatcard" data-v="' + esc(k) + '" aria-pressed="' + on + '" title="' + esc(label) + '"><b>' + esc(name) + '</b>' + beatDots(E.BEATS[k]) + '</button>' +
+    (k === 'none' ? '' : '<button type="button" class="pickhear" data-act="pbeathear" data-v="' + esc(k) + '" aria-label="Hear ' + esc(name) + '" title="Hear it">' + icon('play') + '<span>Hear</span></button>') + '</div>';
+}
+function instCard(i) {
+  const on = i.id === Snd.inst();
+  return '<div class="pickcard' + (on ? ' on' : '') + '"><button type="button" class="pickmain" data-act="instcard" data-v="' + esc(i.id) + '" aria-pressed="' + on + '" title="Tap to choose it and hear it"><b>' + esc(i.label) + '</b><span class="tiny">' + esc(i.hint || '') + '</span></button></div>';
+}
 function arrangeCard(P) {
   const beatOpts = P.ts === 4 ? Object.keys(E.BEATS).filter(k => k !== 'custom' || P.grid).map(k => [k, E.BEATS[k].label]) : [['none', 'No drums'], ['meter', METER_DRUMS[P.ts].label]];
   const beatVal = P.ts === 4 ? (P.beat || 'none') : (P.beat && P.beat !== 'none' ? 'meter' : 'none');
@@ -24,13 +39,22 @@ function arrangeCard(P) {
     '<label class="field"><span>Tempo <b id="pbpmv" class="mono">' + P.bpm + '</b> BPM</span><input type="range" min="40" max="200" value="' + P.bpm + '" data-bind="pbpm" aria-label="Tempo"></label>' +
     '<label class="field"><span>Keyboard rhythm</span>' + selectHtml('pstyle', Object.keys(E.STYLES).map(k => [k, E.STYLES[k].label]), P.style, 'pstyle') + '</label>' +
     '<label class="field"><span>Bass</span>' + selectHtml('pbass', Object.keys(BASS_STYLES).map(k => [k, BASS_STYLES[k]]), P.bassStyle, 'pbass') + '</label>' +
-    '<label class="field"><span>Drums</span>' + selectHtml('pbeat', beatOpts, beatVal, 'pbeat') + '</label>' +
+    '<label class="field"><span>Bass sound</span>' + selectHtml('pbasssound', Object.keys(BASS_SOUNDS).map(k => [k, BASS_SOUNDS[k][0]]), P.bassSound || 'finger', 'pbasssound') + '<small class="tiny">' + (Snd.info && Snd.info().bank === 'ready' ? 'Heard with the sound library.' : 'Needs the sound library to be heard; without it the bass uses the piano sound.') + '</small></label>' +
     (P.ts === 4 ? '<label class="field"><span>Swing</span><input type="range" min="0" max="60" value="' + (P.swing || 0) + '" data-bind="pswing" aria-label="Swing"></label>' : '') +
-    '<label class="field"><span>Drummer\'s feel</span>' + selectHtml('phuman', [['0', 'Exact (like a machine)'], ['1', 'Light human feel'], ['2', 'Loose human feel']], String(P.human || 0), 'phuman') + '</label></div>' +
+    '<label class="field"><span>Drummer\'s feel</span>' + selectHtml('phuman', [['0', 'Exact (like a machine)'], ['1', 'Light human feel'], ['2', 'Loose human feel']], String(P.human || 0), 'phuman') + '</label>' +
+    '<label class="field"><span>Feel of keys and bass</span>' + selectHtml('phumankeys', [['0', 'Exact (like a machine)'], ['1', 'Light human feel'], ['2', 'Loose human feel']], String(P.humanKeys || 0), 'phumankeys') + '</label>' +
+    '<div class="field"><span>Busyness</span><div class="seg" role="group" aria-label="Drummer busyness">' + [[-1, 'Calmer'], [0, 'As written'], [1, 'Busier']].map(o => '<button type="button" class="' + ((P.busy | 0) === o[0] ? 'on' : '') + '" aria-pressed="' + ((P.busy | 0) === o[0]) + '" data-act="pbusy" data-v="' + o[0] + '">' + o[1] + '</button>').join('') + '</div></div>' +
+    '<label class="field"><span>Percussion on top</span>' + selectHtml('pperc', [['off', 'None'], ['shaker', 'Shaker'], ['tambourine', 'Tambourine'], ['congas', 'Congas'], ['shakercongas', 'Shaker and congas']], P.perc || 'off', 'pperc') + '</label>' +
+    '<label class="field"><span>Drum kit</span>' + selectHtml('pkit', [['0', 'Standard'], ['8', 'Room (big, roomy)'], ['16', 'Power (loud, rock)'], ['32', 'Jazz (soft, tight)'], ['40', 'Brushes (very soft)'], ['24', 'Electronic']], String(P.kit || 0), 'pkit') + '</label>' +
+    '<label class="switch fillsw"><input type="checkbox" data-bind="pautofill"' + (P.autoFill ? ' checked' : '') + '><span>Automatic drum fills when the song moves to a new section</span></label></div>' +
+    '<p class="tiny">Busyness, percussion and fills change the drums of the whole song; you can still add or change a fill for one section in the Song form. The drum kits need the instrument library (the installed app has it); without it the built-in drums play.</p>' +
     '<div class="row wrap"><button class="btn ghost sm" type="button" data-act="pdrumreal">' + icon('plus') + 'Use a real drum recording…</button>' +
     (P.beatWas ? '<button class="btn ghost sm" type="button" data-act="pdrumback">Go back to the built-in drums (' + esc((E.BEATS[P.beatWas] || {}).label || P.beatWas) + ')</button>' : '') +
     '<span class="tiny">A drum loop or a whole drum beat, WAV or MP3: it follows the song\'s tempo and replaces the built-in drums.</span></div>' +
-    soundPicker() +
+    '<div class="pickblock"><p class="eyebrow">Drums</p><div class="pickgrid" role="group" aria-label="Drum beat">' + beatOpts.map(o => beatCard(o[0], o[1], beatVal)).join('') + '</div>' +
+    '<details class="morelist"><summary>Choose the drums from a list</summary><label class="field"><span>Drums</span>' + selectHtml('pbeat', beatOpts, beatVal, 'pbeat') + '</label></details></div>' +
+    '<div class="pickblock"><p class="eyebrow">Sound</p><div class="pickgrid" role="group" aria-label="Instrument">' + Snd.instruments().map(i => instCard(i)).join('') + '</div>' +
+    '<details class="morelist"><summary>Choose the sound from a list</summary>' + soundPicker() + '</details></div>' +
     '<p class="tiny">Sections play with their own energy: the intro and outro are gentle, the chorus is fullest.</p></section>';
 }
 /* ---- loops and beats: import audio loops, whole beats and MIDI files; the app's own parts can be switched off ---- */
@@ -121,7 +145,8 @@ function chordsCard(P) {
     const lOpts = LEN_CHOICES.map(b => '<option value="' + b + '"' + (b === sel.beats ? ' selected' : '') + '>' + esc(beatsLabel(b, bar)) + '</option>').join('');
     void kp;
     editor = '<div class="ceditor"><p class="eyebrow">Chord ' + (ci + 1) + ' of ' + s.chords.length + ': <b>' + esc(d.name) + '</b> · ' + esc(d.roman) + ' · ' + esc(d.label) + '</p>' +
-      '<div class="grid3"><label class="field"><span>Chord type</span><select data-bind="pcq">' + qOpts + '</select></label>' +
+      '<div class="grid3"><label class="field"><span>Root note (the chord itself)</span><select data-bind="pcr">' + Array.from({ length: 12 }, (_, i) => i).map(i => { const rd = Songcraft.describe(P.key, { r: i, q: sel.q, b: null }); return '<option value="' + i + '"' + (i === sel.r ? ' selected' : '') + '>' + esc(rd.name) + ' · ' + esc(rd.number) + '</option>'; }).join('') + '</select></label>' +
+      '<label class="field"><span>Chord type</span><select data-bind="pcq">' + qOpts + '</select></label>' +
       '<label class="field"><span>Bass note (slash chord)</span><select data-bind="pcb">' + bOpts + '</select></label>' +
       '<label class="field"><span>Length</span><select data-bind="pclen">' + lOpts + '</select></label></div>' +
       '<label class="switch"><input type="checkbox" data-bind="pcpush"' + (sel.push ? ' checked' : '') + (ci === 0 ? ' disabled' : '') + '><span>Push: arrive half a beat early (an anticipation)' + (ci === 0 ? ' — not on the first chord' : '') + '</span></label>' +
@@ -133,11 +158,12 @@ function chordsCard(P) {
   return '<section class="card"><p class="eyebrow">Step 1 ' + (st.prog ? '<span class="tag ok">Done</span>' : '') + '</p><h3>Chords for each section</h3>' +
     '<p class="muted">Any chord you play: sevenths, ninths, thirteenths, slash chords, borrowed and passing chords. Give each chord its own length, and push a chord to make it land early. Up to ' + MAX_SECTION_CHORDS + ' chords per section.</p>' +
     secTabs(P, 'psec') + strip + editor +
-    '<p class="tiny"><b>Tap a chord</b> above to change its type, bass note, length or push. New chords go ' + (sel ? 'after the chosen chord' : 'at the end') + '.</p>' +
+    '<p class="tiny"><b>Tap a chord</b> above to change its note, type, bass note, length or push. <b>Drag</b> a chord from the lists below onto a chord above (left edge: before it, right edge: after it, middle: replace it), or drag chords above to reorder them. On a touch screen, touch and hold a moment, then drag.</p>' +
+    (sel ? '<div class="field"><span>When you tap a chord in the lists below</span><div class="seg" role="group" aria-label="What a tapped chord does">' + CHORD_MODES.map(([m, l]) => '<button type="button" data-act="pcmode" data-m="' + m + '" aria-pressed="' + ((pst().cmode || 'after') === m) + '" class="' + ((pst().cmode || 'after') === m ? 'on' : '') + '">' + esc(l) + '</button>').join('') + '</div></div>' : '<p class="tiny">New chords go at the end. Choose a chord above to replace it or add next to it.</p>') +
     flavourHtml(P) +
     '<label class="switch"><input type="checkbox" data-bind="psev"' + (P.sev ? ' checked' : '') + '><span>Offer the chords of the key as 7th chords</span></label>' +
     '<div class="field"><span>What could come next' + (after ? ' after ' + esc(Songcraft.describe(P.key, after).name) : '') + '</span><div class="chips">' + sugg.map(c => chordChip(P, c, 'pcadd')).join('') + '</div><p class="tiny">' + esc(sugg.slice(0, 3).map(x => Songcraft.describe(P.key, x).name + ': ' + x.why).join(' · ')) + '</p></div>' +
-    progsHtml(P) +
+    progsHtml(P) + anyChordHtml(P) +
     '<details class="colours"' + (pst().colours ? ' open' : '') + '><summary>Gospel colours: passing chords, borrowed chords, slash chords</summary>' + Songcraft.COLOURS.map(([g, list]) => '<div class="field"><span>' + esc(g) + '</span><div class="chips">' + list.map(c => chordChip(P, c, 'pcadd')).join('') + '</div></div>').join('') + '</details>' +
     '<div class="grid2"><label class="field"><span>Length of new chords</span><select data-bind="pnewlen">' + LEN_CHOICES.map(b => '<option value="' + b + '"' + (b === newLen ? ' selected' : '') + '>' + esc(beatsLabel(b, bar)) + '</option>').join('') + '</select></label>' +
     '<label class="field"><span>Copy chords from</span><select data-bind="pcopy"><option value="">Choose a section…</option>' + others.map(t => '<option value="' + esc(t) + '">' + esc(t) + ' (' + P.sections[t].chords.length + ' chords)</option>').join('') + '</select></label></div>' +
@@ -257,6 +283,9 @@ function guideCard(P) {
       '<div class="grid3"><label class="field"><span>Preset</span><select data-bind="pfxpreset">' + Object.keys(VocalFX.PRESETS).map(id => '<option value="' + id + '"' + (id === fx.preset ? ' selected' : '') + '>' + esc(VocalFX.PRESETS[id].label) + '</option>').join('') + '</select></label>' +
       '<label class="field"><span>Noise reduction</span><select data-bind="pfxnr"' + (fx.preset === 'off' ? ' disabled' : '') + '>' + [['preset', 'As the preset'], ['off', 'Off'], ['light', 'Light'], ['medium', 'Medium'], ['strong', 'Strong']].map(o => '<option value="' + o[0] + '"' + (o[0] === (fx.nr || 'preset') ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select></label>' +
       '<label class="switch"><input type="checkbox" data-bind="pfxroom"' + (fx.reverb !== false ? ' checked' : '') + (fx.preset === 'off' ? ' disabled' : '') + '><span>Room (' + esc(p.room ? ({ church: 'church', hall: 'hall', room: 'studio room' })[p.room] : 'none') + ')</span></label></div>' +
+      '<div class="grid2"><label class="field"><span>Pitch correction</span><select data-bind="pfxtune">' + [['off', 'Off (as sung)'], ['gentle', 'Gentle (halfway)'], ['medium', 'Medium'], ['full', 'Full']].map(o => '<option value="' + o[0] + '"' + (o[0] === (fx.tune || 'off') ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select></label>' +
+      '<label class="field"><span>Move notes towards</span><select data-bind="pfxtunescale"' + ((fx.tune || 'off') === 'off' ? ' disabled' : '') + '>' + [['key', 'The notes of the song\'s key'], ['any', 'The nearest note of any kind']].map(o => '<option value="' + o[0] + '"' + (o[0] === (fx.tuneScale || 'key') ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select></label></div>' +
+      '<p class="tiny">Pitch correction only nudges notes that are a little off (less than half a semitone), keeps your vibrato, slides and timing, and leaves everything else exactly as you sang it. Start with Gentle; Off puts the recording back as sung.</p>' +
       (p.hint ? '<p class="tiny">' + esc(p.hint) + '</p>' : '') +
       '<div class="row wrap"><button class="btn ghost sm" type="button" id="guidehear">' + icon('play') + 'Listen: with the vocal sound</button><button class="btn ghost sm" type="button" id="guideraw">' + icon('play') + 'Listen: raw (before)</button>' +
       '<button class="btn ghost sm" type="button" data-act="pguidesave">Save this track (24-bit WAV)</button><button class="btn ghost sm" type="button" data-act="pguidedel">Delete all takes</button></div>' +
@@ -266,24 +295,85 @@ function guideCard(P) {
   }
   return html + '</section>';
 }
+/* ---- the song at a glance: every backing part as coloured blocks along the song, a brighter block where it plays more ---- */
+function overviewCard(P) {
+  const A = arrangeSong(Object.assign({}, P, { mixer: undefined }), { melInst: Snd.inst() }), bar = meterOf(P).bar, nb = Math.max(1, Math.ceil(A.total / bar - 1e-6));
+  const m = mixerOf(P), solo = anySolo(P), NAME = { chords: 'Keys', bass: 'Bass', drums: 'Drums', melody: 'Melody', choir: 'Choir', loops: 'Loops' };
+  const cnt = {}; Object.keys(NAME).forEach(k => { cnt[k] = new Array(nb).fill(0); });
+  A.events.forEach(e => { if (e.click || e.loop) return; const k = Snd.partOf(e); if (!cnt[k]) return; const i = Math.min(nb - 1, Math.floor(e.t / bar + 1e-6)); cnt[k][i]++; });
+  (A.places || []).forEach(pl => { for (let i = Math.floor(pl.at / bar + 1e-6); i < Math.ceil((pl.at + pl.dur) / bar - 1e-6) && i < nb; i++) if (i >= 0) cnt.loops[i] = 1; });
+  const keys = Object.keys(NAME).filter(k => cnt[k].some(x => x > 0));
+  if (!keys.length) return '';
+  const head = '<div class="ovrow ovhead"><span></span><div class="ovbar">' + A.timeline.map(t => '<span style="flex:' + t.beats + '" title="' + esc(t.label) + '">' + esc(t.type) + '</span>').join('') + '</div></div>';
+  const rows = keys.map(k => {
+    const mx = Math.max(1, ...cnt[k]), c = m[k] || {}, off = c.mute || (solo && !c.solo);
+    return '<div class="ovrow ch-' + k + (off ? ' off' : '') + '"><span class="ovname">' + NAME[k] + (off ? ' <small>off</small>' : '') + '</span><div class="ovcells" style="--n:' + nb + '">' +
+      cnt[k].map((x, i) => '<i' + (x ? ' style="opacity:' + (0.3 + 0.7 * Math.min(1, x / mx)).toFixed(2) + '"' : ' class="empty"') + ' title="Bar ' + (i + 1) + '"></i>').join('') + '</div></div>';
+  }).join('');
+  return '<section class="card"><p class="eyebrow">Song at a glance</p><h3>Every part, bar by bar</h3>' +
+    '<p class="muted">A brighter block means that part plays more in that bar; an empty gap means it is silent. Use it to see where the song builds and where it thins out. Recorded tracks are on the Record tab.</p>' +
+    '<div class="overview" id="overview"><div class="ovplay" id="ovcur" aria-hidden="true"></div>' + head + rows + '</div></section>';
+}
+/* the sound of one backing part: tone, evening-out and extra room (heard the next time the song plays) */
+function fxHtml(key, ch) {
+  const tone = Math.round((ch.tone || 0) * 100), comp = Math.round((ch.comp || 0) * 100), room = Math.round((ch.room || 0) * 100), used = !!(tone || comp || room || ch.lc || ch.el || ch.em || ch.eh || ch.duck);
+  const ef = ch.ef || 1000, efv = Math.round(100 * Math.log(ef / 200) / Math.log(25)), hz = x => (x >= 1000 ? (Math.round(x / 100) / 10) + ' kHz' : Math.round(x) + ' Hz');
+  const eq = (f, label, v) => '<label class="field fxfield"><span>' + label + ' <span class="mono" id="mxfx-' + f + '-' + esc(key) + '">' + (v > 0 ? '+' : '') + v + ' dB</span></span><input type="range" min="-12" max="12" step="1" value="' + v + '" data-bind="mxfx" data-f="' + f + '" data-k="' + esc(key) + '" aria-label="' + label + '"></label>';
+  const more = '<p class="tiny fxhead">EQ and low cut</p><label class="field fxfield"><span>Low cut</span><select data-bind="mxfx" data-f="lc" data-k="' + esc(key) + '" aria-label="Low cut">' + [[0, 'Off'], [60, '60 Hz (rumble)'], [100, '100 Hz'], [160, '160 Hz (thin)'], [250, '250 Hz (very thin)']].map(o => '<option value="' + o[0] + '"' + (o[0] === (ch.lc || 0) ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select></label>' +
+    eq('el', 'Bass', Math.round(ch.el || 0)) + eq('em', 'Middle', Math.round(ch.em || 0)) +
+    '<label class="field fxfield"><span>Middle pitch <span class="mono" id="mxfx-ef-' + esc(key) + '">' + hz(ef) + '</span></span><input type="range" min="0" max="100" step="2" value="' + efv + '" data-bind="mxfx" data-f="ef" data-k="' + esc(key) + '" aria-label="Middle pitch"></label>' + eq('eh', 'Treble', Math.round(ch.eh || 0)) +
+    (key === 'drums' ? '' : '<p class="tiny fxhead">Make room for the kick</p><label class="field fxfield"><span>Duck under the kick drum <span class="mono" id="mxfx-duck-' + esc(key) + '">' + Math.round((ch.duck || 0) * 100) + '%</span></span><input type="range" min="0" max="90" step="5" value="' + Math.round((ch.duck || 0) * 100) + '" data-bind="mxfx" data-f="duck" data-k="' + esc(key) + '" aria-label="Duck under the kick drum"></label>');
+  const sl = (bind, label, min, val, unit, id) => '<label class="field fxfield"><span>' + label + ' <span class="mono" id="' + id + '">' + val + unit + '</span></span><input type="range" min="' + min + '" max="100" step="5" value="' + val + '" data-bind="' + bind + '" data-k="' + esc(key) + '" aria-label="' + label + '"></label>';
+  return '<details class="fxmore"' + (used ? ' open' : '') + '><summary>Sound' + (used ? ' <small>on</small>' : '') + '</summary>' +
+    sl('mxtone', 'Warm · bright', -100, tone, '', 'mxtone-' + esc(key)) + sl('mxcomp', 'Even out', 0, comp, '%', 'mxcomp-' + esc(key)) + sl('mxroom', 'Extra room', 0, room, '%', 'mxroom-' + esc(key)) +
+    more + '<button type="button" class="btn ghost sm" data-act="mxfxreset" data-k="' + esc(key) + '">Flat</button></details>';
+}
 /* ---- the mixer: a strip for each part of the backing and each recorded track ---- */
 function mixerCard(P) {
   const m = mixerOf(P), solo = anySolo(P);
-  const strip = (key, name, ch, kind) => '<div class="strip' + (ch.mute ? ' muted' : '') + (solo && !ch.solo ? ' dimmed' : '') + '"><b title="' + esc(name) + '">' + esc(name) + '</b>' +
-    '<label class="field"><span>Volume <span class="mono" id="mxv-' + esc(kind + key) + '">' + Math.round((ch.v == null ? ch.gain : ch.v) * 100) + '%</span></span><input type="range" min="0" max="150" value="' + Math.round((ch.v == null ? (ch.gain == null ? 1 : ch.gain) : ch.v) * 100) + '" data-bind="mxvol" data-k="' + esc(key) + '" data-kind="' + kind + '"></label>' +
-    '<label class="field"><span>Left · right <span class="mono">' + panLabel(ch.pan || 0) + '</span></span><input type="range" min="-100" max="100" step="5" value="' + Math.round((ch.pan || 0) * 100) + '" data-bind="mxpan" data-k="' + esc(key) + '" data-kind="' + kind + '"></label>' +
-    '<div class="row"><button type="button" class="btn ghost sm mute' + (ch.mute ? ' on' : '') + '" data-act="mxmute" data-k="' + esc(key) + '" data-kind="' + kind + '" aria-pressed="' + !!ch.mute + '">M</button><button type="button" class="btn ghost sm solo' + (ch.solo ? ' on' : '') + '" data-act="mxsolo" data-k="' + esc(key) + '" data-kind="' + kind + '" aria-pressed="' + !!ch.solo + '">S</button></div></div>';
+  const strip = (key, name, ch, kind) => { const vv = ch.v == null ? (ch.gain == null ? 1 : ch.gain) : ch.v, pct = Math.round(vv * 100), id = esc(kind + key);
+    return '<div class="strip ch-' + (kind === 'track' ? 'track' : esc(key)) + (ch.mute ? ' muted' : '') + (solo && !ch.solo ? ' dimmed' : '') + '"><b class="chname" title="' + esc(name) + '">' + esc(name) + '</b>' +
+    '<div class="faderbox"><span class="vmeter" aria-hidden="true"><i data-meter="' + esc(kind + ':' + key) + '"></i></span>' +
+    '<input class="vfader" type="range" min="0" max="150" value="' + pct + '" aria-label="' + esc(name) + ' volume" data-bind="mxvol" data-k="' + esc(key) + '" data-kind="' + kind + '"></div>' +
+    '<span class="mono volread" id="mxv-' + id + '">' + pct + '%</span>' +
+    '<label class="field panfield"><span>Left · right <span class="mono">' + panLabel(ch.pan || 0) + '</span></span><input type="range" min="-100" max="100" step="5" value="' + Math.round((ch.pan || 0) * 100) + '" data-bind="mxpan" data-k="' + esc(key) + '" data-kind="' + kind + '"></label>' +
+    (kind === 'part' ? fxHtml(key, ch) : '') +
+    '<div class="row mswrap"><button type="button" class="btn ghost sm mute' + (ch.mute ? ' on' : '') + '" data-act="mxmute" data-k="' + esc(key) + '" data-kind="' + kind + '" aria-pressed="' + !!ch.mute + '" title="Mute">M</button><button type="button" class="btn ghost sm solo' + (ch.solo ? ' on' : '') + '" data-act="mxsolo" data-k="' + esc(key) + '" data-kind="' + kind + '" aria-pressed="' + !!ch.solo + '" title="Solo: hear only this">S</button></div></div>'; };
   const A = arrangeSong(Object.assign({}, P, { mixer: undefined }), { melInst: Snd.inst() }), has = k => k === 'loops' ? (P.loops || []).length > 0 : k === 'choir' ? !!(P.choir && P.choir.on) : A.events.some(e => Snd.partOf(e) === k);
   const SHORT = { chords: 'Keys', bass: 'Bass', drums: 'Drums', melody: 'Melody', choir: 'Choir', loops: 'Loops' };
   const parts = Object.keys(MIX_PARTS).filter(has).map(k => strip(k, SHORT[k], m[k], 'part'));
   const tracks = recordedTracks(P).map(r => strip(r.id || 'guide', r.id ? r.name : 'Lead vocal', r.T, 'track'));
   return '<section class="card"><p class="eyebrow">Mixer</p><h3>Balance the song</h3>' +
-    '<p class="muted">Set how loud each part is and where it sits from left to right. <b>M</b> mutes a part; <b>S</b> (solo) plays only the soloed parts, to listen closely. The meter shows the whole song while it plays: keep it out of the red. The mixer is used for playback, the audio files and the stems.</p>' +
-    '<div class="strips">' + parts.concat(tracks).join('') + '</div>' +
-    '<div class="field"><span>Master <span class="mono" id="mastermeterv">—</span></span><div class="miclevel master" aria-hidden="true"><i id="mastermeter"></i></div></div>' +
+    '<p class="muted">Set how loud each part is and where it sits from left to right. <b>M</b> mutes a part; <b>S</b> (solo) plays only the soloed parts, to listen closely. The meter shows the whole song while it plays: keep it out of the red. The mixer is used for playback, the audio files and the stems. Under <b>Sound</b> each part has a tone control (warm to bright), <b>Even out</b> (keeps its volume steady) and <b>Extra room</b>; you hear them the next time you press Play.</p>' +
+    '<div class="strips studio">' + parts.concat(tracks).join('') + '</div>' +
+    '<div class="field masterbar"><span>Master <span class="mono" id="mastermeterv">—</span></span><div class="miclevel master" aria-hidden="true"><i id="mastermeter"></i></div><span class="tiny">Keep the master out of the red (above −1 dB). The scale runs from −48 dB to 0.</span></div>' +
     (solo ? '<button class="btn ghost sm" type="button" data-act="mxunsolo">Clear solo</button>' : '') + '</section>';
 }
 const panLabel = p => (Math.abs(p) < 0.05 ? 'centre' : (p < 0 ? 'L ' : 'R ') + Math.round(Math.abs(p) * 100));
+/* ---- "Ready to upload?": checks the finished song and the cover picture, and makes the release files ---- */
+const NOTE_ICON = { ok: '✔', warn: '!', bad: '✖' };
+function notesHtml(notes) {
+  return '<ul class="relnotes">' + notes.map(x => '<li class="rel-' + x.level + '"><span class="relmark" aria-hidden="true">' + NOTE_ICON[x.level] + '</span><span><b>' + esc(x.title) + '</b> ' + esc(x.text) + '</span></li>').join('') + '</ul>';
+}
+function detailNotes(P) {
+  const i = P.info || {}, n = [], add = (level, title, text) => n.push({ level, title, text });
+  if (!P.title || /^(my song|untitled)/i.test(P.title.trim())) add('warn', 'Give the song a real title', 'It is still called "' + (P.title || 'My song') + '". The title goes into the audio files and shows on Spotify.'); else add('ok', 'Title: ' + P.title, 'It is written into the files.');
+  if (!(i.writers || '').trim()) add('warn', 'Who wrote it?', 'Fill in "Written by" under Credits and copyright (Write tab). Distributors ask for the songwriter.'); else add('ok', 'Writer: ' + i.writers, 'Added to the files.');
+  if (!(i.artist || '').trim()) add('warn', 'Artist name', 'Fill in the artist or ministry name under Credits and copyright. The writer is used until you do.');
+  return n;
+}
+function releaseCard(P) {
+  const ps = pst(), rel = ps.rel, cov = ps.relCover;
+  return '<section class="card" id="relcard"><p class="eyebrow">Release</p><h3>Ready to upload?</h3>' +
+    '<p class="muted">Before you send a song to YouTube, Spotify or a distributor, check it here. The app mixes and masters the song as it will be saved, then tells you in plain words what is fine and what to fix. It does not change your song.</p>' +
+    '<div class="row wrap"><button class="btn primary sm" type="button" data-act="prcheck">Check my song</button>' +
+    '<button class="btn ghost sm" type="button" data-act="pcoverpick">Check my cover picture…</button>' +
+    '<button class="btn ghost sm" type="button" data-act="prelease">Make my release files (ZIP)</button></div>' +
+    '<input type="file" id="coverfile" accept="image/jpeg,image/png" hidden>' +
+    '<div id="relresult" aria-live="polite">' + (rel ? '<h4>Your song</h4>' + notesHtml(rel.notes.concat(detailNotes(P))) + '<p class="tiny">Checked ' + esc(rel.at) + '. Check again after any change.</p>' : '') +
+    (cov ? '<h4>Cover picture: ' + esc(cov.name) + '</h4>' + notesHtml(cov.notes) : '') + '</div>' +
+    '<p class="tiny"><b>The release ZIP</b> holds a 16-bit WAV (upload this one to a distributor such as DistroKid, TuneCore or CD Baby), an MP3 for WhatsApp, and a note of the results. Distributors give each song its ISRC number and send it to Spotify, Apple Music, YouTube Music, Boomplay and others. Check each distributor\'s own rules and fees.</p></section>';
+}
 function exportCard(P) {
   const ms = P.master || {}, tgt = Mastering.TARGETS[ms.target] ? ms.target : 'stream', last = pst().lastMaster;
   return '<section class="card"><p class="eyebrow">Finish and share</p><h3>Master, export and stems</h3>' +
@@ -337,7 +427,7 @@ function viewProject(pid) {
   const html = '<div class="screen">' + howTo('project', 'How this song page works', ['Choose a section with the chips (Verse, Chorus…). Its chords and melody are edited below.', 'Chords: play them in from your keyboard, tap them from the key, the suggestions or the Gospel colours. Tap a chord in the strip to change its type (9th, 13th, sus…), give it a bass note (F/G), a length, or a push.', 'Melody: play it in or sing it in after the count-in, then fix notes in the editor. Type the words under it, one syllable per note.', 'Step 4 puts the sections in order: repeats, a key change for the last chorus, tags, vamps and band stops.', 'Choir: switch on soprano, alto and tenor parts and save rehearsal audio for each.', 'Once you have recorded, the Timeline shows every track. Drag across a track to choose a part: silence it, or sing just that part again. Undo and Redo (or Ctrl+Z and Ctrl+Y) bring every change back.', 'At the bottom: the guide track, and the exports: audio, MIDI, lead sheet, chord chart and number chart.']) + '<div class="pagehead"><button class="btn ghost sm" type="button" data-act="go" data-to="song">' + icon('back') + 'Song Lab</button><h1 class="sr-only">Song: ' + esc(P.title || 'My song') + '</h1><label class="field"><span>Song title</span><input id="ptitle" type="text" maxlength="60" value="' + esc(P.title) + '" data-bind="ptitle"></label>' +
     safetyHtml(P) + '<p class="muted">' + nDone + ' of 4 steps done' + (P.done ? ' · finished' : '') + ' · ' + esc(fmt(P.key)) + ' · ' + METERS[P.ts].label + ' · ' + P.bpm + ' BPM · ' + fmtTime(secs) + ' long</p>' + bar(nDone * 25) + '</div>' +
     '<section class="card player"><div class="split"><div><p class="eyebrow">The whole song</p><h3 id="songpos">' + esc(formOf(P).map(i => itemLabel(i, P)).join(' · ')) + '</h3></div>' +
-    '<div class="row wrap"><button class="btn primary" type="button" id="songplay">' + icon('play') + 'Play the song</button>' + (recordedTracks(P).length ? '<label class="switch"><input type="checkbox" data-bind="pwithguide"' + (pst().withGuide ? ' checked' : '') + '><span>With the recorded tracks</span></label>' : '') + '</div></div>' +
+    '<div class="row wrap"><button class="btn primary" type="button" id="songplay">' + icon('play') + 'Play the song</button><button class="btn ghost" type="button" data-act="pperform">Perform (full screen)</button>' + (recordedTracks(P).length ? '<label class="switch"><input type="checkbox" data-bind="pwithguide"' + (pst().withGuide ? ' checked' : '') + '><span>With the recorded tracks</span></label>' : '') + '</div></div>' +
     (lowMem(P) ? '<p class="tiny memnote">' + icon('info') + ' Memory saver is on for this song (about ' + memEstimateMB(P) + ' MB of recordings and loops): tracks play with a light version of their vocal sound, and the saved song uses the full sound, one track at a time. Profile › Settings › Memory saver.</p>' : '') +
     kbdOutRow() + undoRowHtml() +
     '<div class="songbar" id="songbar">' + (() => { const A = arrangeSong(P); return A.timeline.map(t => '<span style="flex:' + t.beats + '" title="' + esc(t.label) + '">' + esc(t.type) + '</span>').join(''); })() + '<i id="songcur"></i></div></section>' +
@@ -345,16 +435,16 @@ function viewProject(pid) {
     '<section class="card"><p class="eyebrow">Step 3 ' + (st.chorus ? '<span class="tag ok">Done</span>' : '') + '</p><h3>Make it a chorus</h3><p class="muted">A chorus carries the main message and repeats. Write 2 to 4 short lines that someone could sing back after hearing them once.</p><label class="field"><span>Chorus lyrics</span><textarea id="lchorus" rows="4" data-bind="lchorus">' + esc(P.lyrics.chorus) + '</textarea></label>' +
     '<div class="row wrap"><button class="btn ' + (st.chorus ? 'ghost' : 'primary') + ' sm" data-act="pstep" data-k="chorus">' + (st.chorus ? 'Marked done' : 'Mark step done') + '</button></div></section>' +
     infoCard(P) + '</div>' +
-    '<div class="ptab' + (pst().tab === 'arrange' ? ' on' : '') + '" data-tab="arrange">' + arrangeCard(P) + formCard(P) + loopsCard(P) + choirCard(P) + '</div>' +
+    '<div class="ptab' + (pst().tab === 'arrange' ? ' on' : '') + '" data-tab="arrange">' + arrangeCard(P) + editCard(P) + formCard(P) + loopsCard(P) + choirCard(P) + '</div>' +
     '<div class="ptab' + (pst().tab === 'record' ? ' on' : '') + '" data-tab="record">' + guideCard(P) + timelineCard(P) + remoteCard() + '</div>' +
-    '<div class="ptab' + (pst().tab === 'mix' ? ' on' : '') + '" data-tab="mix">' + mixerCard(P) + '</div>' +
-    '<div class="ptab' + (pst().tab === 'share' ? ' on' : '') + '" data-tab="share">' + exportCard(P) +
+    '<div class="ptab' + (pst().tab === 'mix' ? ' on' : '') + '" data-tab="mix">' + overviewCard(P) + mixerCard(P) + levelsCard(P) + '</div>' +
+    '<div class="ptab' + (pst().tab === 'share' ? ' on' : '') + '" data-tab="share">' + releaseCard(P) + exportCard(P) +
     '<div class="row wrap"><button class="btn ghost" data-act="pdel" data-id="' + esc(P.id) + '">' + (ui.confirmDel === P.id ? 'Tap again to delete this project' : 'Delete project') + '</button></div></div></div>';
   return { html, mount(root) { return mountProject(root, P); } };
 }
 
 /* ---- behaviour: player, melody recorder, note editor, guide recorder ---- */
-let projPlay = null;
+let projPlay = null, PROJ_CTL = null;
 function stopProjPlay() { if (projPlay) { const h = projPlay; projPlay = null; h.stop(); } }
 function playScript(script, o) {
   stopProjPlay();
@@ -377,30 +467,114 @@ function mountProject(root, P) {
   const btn = $('#songplay', root), cur = $('#songcur', root), pos = $('#songpos', root);
   let tick = null, playing = false, gsrc = null, live = null;
   const reset = () => { if (live) { live.stop(); live = null; } playing = false; clearInterval(tick); if (gsrc) { try { gsrc.stop(); } catch (e) { /* ignore */ } gsrc = null; } tick = null; if (btn) btn.innerHTML = icon('play') + 'Play the song'; if (cur) cur.style.left = '0'; if (pos) pos.textContent = formOf(P).map(i => itemLabel(i, P)).join(' · '); };
-  if (btn) btn.addEventListener('click', async () => {
-    if (playing) { stopProjPlay(); reset(); return; }
+  /* from: the part (0, 1, 2 ...) to begin at; countBars: bars of clicks before it starts (used by the phone remote) */
+  const startPlay = async (fromPart, countBars) => {
     const A = arrangeSong(P, { melInst: Snd.inst() }), spb = 60 / P.bpm;
+    const fromBeat = fromPart > 0 && A.timeline[fromPart] ? A.timeline[fromPart].start : 0, lead = countBars > 0 ? countBars * METERS[P.ts].bar : 0;
     if (hasAudioLoops(P) && pos) pos.textContent = 'Preparing the loops…';
     A.script.audio = await loopAudio(P, A.places);
     if (recordedTracks(P).length && pst().withGuide && pos) pos.textContent = 'Preparing the recorded tracks…';
     if (pst().withGuide) A.script.audio = A.script.audio.concat(await recordedAudio(P, { live: true }).catch(() => []));
     const guide = null;
-    let start = 0; playing = true; btn.innerHTML = icon('stop') + 'Stop';
-    playScript(A.script, {
+    let script = fromBeat > 0 ? scriptFrom(A.script, fromBeat) : A.script;
+    if (lead) script = withCountIn(script, lead, METERS[P.ts].bar);
+    let start = 0; playing = true; if (btn) btn.innerHTML = icon('stop') + 'Stop';
+    playScript(script, {
       // a processed guide already has its room, so it goes straight to the output (no second reverb)
-      onStart: (t, c, bus) => { start = t; if (live) live.stop(); live = liveStart(P, t, 0); if (guide) gsrc = Snd.playBuffer(guide, t + (P.guide.nudgeMs || 0) / 1000, P.guide.gain == null ? 1 : P.guide.gain, curTrack(P).fx.preset !== 'off' ? Snd.dryBus() : bus); },
+      onStart: (t, c, bus) => { start = t + lead * spb; if (live) live.stop(); live = liveStart(P, t + lead * spb, fromBeat); if (guide) gsrc = Snd.playBuffer(guide, t + (P.guide.nudgeMs || 0) / 1000, P.guide.gain == null ? 1 : P.guide.gain, curTrack(P).fx.preset !== 'off' ? Snd.dryBus() : bus); },
       onEnd: () => reset()
     });
     const meter = Snd.meter(), mbuf = meter ? new Float32Array(meter.fftSize) : null, mEl = $('#mastermeter'), mTxt = $('#mastermeterv');
     tick = setInterval(() => {
       if (meter && mEl) { meter.getFloatTimeDomainData(mbuf); let pk = 0; for (let i = 0; i < mbuf.length; i++) pk = Math.max(pk, Math.abs(mbuf[i])); const d = 20 * Math.log10(Math.max(1e-6, pk)); mEl.style.width = Math.max(0, Math.min(100, (d + 48) / 48 * 100)) + '%'; mEl.classList.toggle('hot', d > -1); if (mTxt) mTxt.textContent = (d < -90 ? '−∞' : d.toFixed(1)) + ' dB'; }
-      const beat = (Snd.now() - start) / spb; if (beat < 0) return;
+      if (Snd.partLevel) document.querySelectorAll('[data-meter]').forEach(el => { const pk = Snd.partLevel(el.dataset.meter); if (pk < 0) { el.style.height = '0%'; return; } const d = 20 * Math.log10(Math.max(1e-6, pk)); el.style.height = Math.max(0, Math.min(100, (d + 48) / 48 * 100)) + '%'; el.classList.toggle('hot', d > -1); });
+      const beat = (Snd.now() - start) / spb + fromBeat; if (beat < fromBeat) return;
       if (cur) cur.style.left = Math.min(100, 100 * beat / A.total) + '%';
+      const oc = document.getElementById('ovcur'); if (oc) oc.style.left = 'calc(70px + (100% - 70px) * ' + Math.min(1, Math.max(0, beat / A.total)).toFixed(4) + ')';
       const seg = A.timeline.find(t => beat >= t.start && beat < t.start + t.beats);
       if (seg && pos) { let k = 0; seg.chs.forEach((c, i) => { if (beat >= c.t - 1e-6) k = i; }); const c = seg.chs[k]; pos.textContent = seg.label + ' · ' + c.name + ' (' + c.number + ')' + (seg.key !== P.key ? ' · key of ' + fmt(seg.key) : ''); }
     }, 80);
+  };
+  const cvf = $('#coverfile');
+  if (cvf) cvf.addEventListener('change', () => {
+    const f = cvf.files && cvf.files[0]; if (!f) return;
+    const url = URL.createObjectURL(f), img = new Image();
+    const done = (w, h) => { URL.revokeObjectURL(url); pst().relCover = { name: f.name, notes: Mastering.coverNotes(w, h, f.type, f.size) }; cvf.value = ''; render(); };
+    img.onload = () => done(img.naturalWidth, img.naturalHeight); img.onerror = () => done(0, 0); img.src = url;
   });
-  cl.push(() => { stopProjPlay(); clearInterval(tick); });
+  if (btn) btn.addEventListener('click', () => { if (playing) { stopProjPlay(); reset(); return; } startPlay(0, 0); });
+  /* what the phone remote may ask of the player */
+  PROJ_CTL = { pid: P.id, play: (fromPart, countBars) => { stopProjPlay(); reset(); return startPlay(fromPart || 0, countBars || 0); }, stop: () => { stopProjPlay(); reset(); } };
+  cl.push(() => { if (PROJ_CTL && PROJ_CTL.pid === P.id) PROJ_CTL = null; stopProjPlay(); clearInterval(tick); });
+
+
+  /* drag and drop of chords: mouse, pen and touch (touch: hold a moment, then drag).
+     A chord chip dropped on a chord: left third = before it, right third = after it, middle = replace it.
+     A chord of the strip dropped on another chord: before, after, or swap. */
+  const anyCard = $('#anycard', root); if (anyCard) anyCard.addEventListener('toggle', () => { pst().anyOpen = anyCard.open; });
+  const strip = $('.cstrip', root);
+  if (strip) {
+    let st = null, ghost = null, hold = null, blockClick = false, raf = 0;
+    const zoneOf = (el, x) => { const r = el.getBoundingClientRect(), f = (x - r.left) / Math.max(1, r.width); return f < 0.3 ? 'before' : f > 0.7 ? 'after' : 'replace'; };
+    const clearMarks = () => root.querySelectorAll('.cchord.dz-before,.cchord.dz-after,.cchord.dz-replace,.cstrip.dz-end').forEach(e => e.classList.remove('dz-before', 'dz-after', 'dz-replace', 'dz-end'));
+    const cleanup = () => { clearTimeout(hold); hold = null; if (raf) cancelAnimationFrame(raf); raf = 0; if (ghost) ghost.remove(); ghost = null; clearMarks(); document.body.classList.remove('dragging-chord'); st = null; };
+    const begin = () => { if (!st || st.on) return; st.on = true; ghost = document.createElement('div'); ghost.className = 'dndghost'; ghost.textContent = st.label; document.body.appendChild(ghost); document.body.classList.add('dragging-chord'); st.cx = st.x0; st.cy = st.y0; raf = requestAnimationFrame(auto); };
+    const overAt = (x, y) => { const e = document.elementFromPoint(x, y); return e ? e.closest('.cchord') : null; };
+    const move = ev => {
+      if (!st || ev.pointerId !== st.id) return;
+      const dx = ev.clientX - st.x0, dy = ev.clientY - st.y0, dist = Math.hypot(dx, dy);
+      if (!st.on) {
+        if (st.touch) { if (dist > 10) cleanup(); return; }
+        if (dist < 6) return; begin();
+      }
+      ev.preventDefault(); st.cx = ev.clientX; st.cy = ev.clientY; track();
+    };
+    /* show where the chord would land, and scroll the page when the finger or mouse is near the top or bottom edge */
+    const track = () => {
+      if (!st || !st.on) return; const x = st.cx, y = st.cy;
+      ghost.style.left = x + 12 + 'px'; ghost.style.top = y + 12 + 'px';
+      clearMarks(); const t = overAt(x, y);
+      if (t && !(st.from !== undefined && t === st.src)) t.classList.add('dz-' + zoneOf(t, x));
+      else if (!t && st.from === undefined) { const rr = strip.getBoundingClientRect(); if (y > rr.top - 24 && y < rr.bottom + 24) strip.classList.add('dz-end'); }
+    };
+    const auto = () => {
+      raf = 0; if (!st || !st.on) return;
+      const h = window.innerHeight, edge = 70, y = st.cy; let dy = 0;
+      if (y < edge) dy = -Math.ceil((edge - y) / 5); else if (y > h - edge) dy = Math.ceil((y - (h - edge)) / 5);
+      if (dy) { window.scrollBy(0, dy); track(); }
+      raf = requestAnimationFrame(auto);
+    };
+    const up = ev => {
+      if (!st || ev.pointerId !== st.id) return;
+      const was = st.on, cur = st; let done = false;
+      if (was) {
+        const t = overAt(ev.clientX, ev.clientY), P = curProj();
+        if (t) { const j = +t.dataset.i, mode = zoneOf(t, ev.clientX); if (cur.from !== undefined) { if (cur.from !== j) { done = true; cleanup(); moveChord(P, cur.from, j, mode); } } else { done = true; cleanup(); const c = { r: cur.r, q: cur.q, b: cur.b, beats: pst().newLen || meterOf(P).bar }; previewChord(P, c); placeChord(P, c, mode, j); } }
+        else if (cur.from === undefined) { const rr = strip.getBoundingClientRect(); if (ev.clientY > rr.top - 24 && ev.clientY < rr.bottom + 24) { done = true; cleanup(); const c = { r: cur.r, q: cur.q, b: cur.b, beats: pst().newLen || meterOf(P).bar }; previewChord(P, c); placeChord(P, c, 'end', -1); } }
+        blockClick = true; setTimeout(() => { blockClick = false; }, 60);
+      }
+      if (!done) cleanup();
+    };
+    const down = ev => {
+      if (ev.button > 0) return;
+      const chip = ev.target.closest('.chip-btn[data-act="pcadd"]'), ch = ev.target.closest('.cchord');
+      const src = chip || ch; if (!src || !root.contains(src)) return;
+      cleanup();
+      st = { id: ev.pointerId, x0: ev.clientX, y0: ev.clientY, touch: ev.pointerType === 'touch', src, on: false };
+      if (chip) { st.r = +chip.dataset.r; st.q = chip.dataset.q; st.b = chip.dataset.b === '' ? null : +chip.dataset.b; st.label = (chip.querySelector('b') || chip).textContent; }
+      else { st.from = +ch.dataset.i; st.label = (ch.querySelector('b') || ch).textContent; }
+      if (st.touch) hold = setTimeout(() => { begin(); }, 280);
+    };
+    const touchBlock = ev => { if (st && st.on) ev.preventDefault(); };
+    const clickBlock = ev => { if (blockClick) { ev.stopPropagation(); ev.preventDefault(); } };
+    root.addEventListener('pointerdown', down);
+    document.addEventListener('pointermove', move, { passive: false });
+    document.addEventListener('pointerup', up);
+    const cancel = () => cleanup(); document.addEventListener('pointercancel', cancel);
+    document.addEventListener('touchmove', touchBlock, { passive: false });
+    document.addEventListener('click', clickBlock, true);
+    cl.push(() => { cleanup(); root.removeEventListener('pointerdown', down); document.removeEventListener('pointercancel', cancel); document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.removeEventListener('touchmove', touchBlock); document.removeEventListener('click', clickBlock, true); });
+  }
 
   /* chords played in from the keyboard: each chord (3+ notes) is added to the section when it is released */
   const kbBtn = $('#pkbin', root), kbInfo = $('#pkbinfo', root);
@@ -620,7 +794,7 @@ function mountProject(root, P) {
     const room = await storageRoomMB(); if (room !== null && room < 150) { gInfo.textContent = 'There is only ' + room + ' MB of room left on this computer, not enough for a recording. Free some space first (delete files you do not need).'; return; }
     gBtn.innerHTML = icon('stop') + 'Stop recording'; ui.recording = true; let liveRec = null;
     g = startGuideRecording(P, st => {
-      if (st.state === 'level') { showLvl(st.peak); return; }
+      if (st.state === 'level') { showLvl(st.peak); if (typeof RemoteLink !== 'undefined') RemoteLink.level(st.peak); return; }
       if (st.state === 'recording') { gInfo.textContent = 'Recording' + (st.label ? ' from ' + st.label : '') + (st.settings ? ' (' + Math.round(st.settings.sampleRate / 100) / 10 + ' kHz)' : '') + '. Watch the green bar move as you sing.' + (pst().monitor ? ' You hear yourself with the vocal sound.' : ''); return; }
       if (st.state === 'started') { if (liveRec) liveRec.stop(); liveRec = liveStart(P, st.start, st.fromBeat); return; }
       showLvl(0); ui.recording = false; if (liveRec) { liveRec.stop(); liveRec = null; }
@@ -787,6 +961,44 @@ function insertChord(P, c) {
   if (sec === 'Chorus') P.steps.prog = false; syncLegacy(P); touch(); render();
 }
 
+/* put a chord into the chosen section: replace the chosen chord, add before it, add after it, or at the end.
+   A replaced chord starts fresh (plain chord as chosen) and keeps only its place and length. */
+const CHORD_MODES = [['replace', 'Replace the chosen chord'], ['before', 'Add before it'], ['after', 'Add after it']];
+function placeChord(P, c, mode, i) {
+  const sec = pst().sec, s = P.sections[sec];
+  if (!s.chords[i]) mode = 'end';
+  if (mode !== 'replace' && s.chords.length >= MAX_SECTION_CHORDS) { toast(MAX_SECTION_CHORDS + ' chords is the most a section can hold.'); return false; }
+  c = { r: c.r, q: c.q, b: c.b === undefined ? null : c.b, beats: c.beats || meterOf(P).bar, push: false };
+  if (mode === 'replace') { c.beats = s.chords[i].beats; s.chords[i] = c; pst().ci = i; }
+  else if (mode === 'before') { s.chords.splice(i, 0, c); pst().ci = i; }
+  else if (mode === 'after') { s.chords.splice(i + 1, 0, c); pst().ci = i + 1; }
+  else { s.chords.push(c); pst().ci = -1; }
+  if (s.chords[0]) s.chords[0].push = false;
+  if (sec === 'Chorus') P.steps.prog = false;
+  syncLegacy(P); touch(); render(); return true;
+}
+/* move chord i of the chosen section before or after chord j, or swap them (used by drag and drop) */
+function moveChord(P, i, j, mode) {
+  const s = P.sections[pst().sec]; if (!s.chords[i] || !s.chords[j] || i === j) return false;
+  if (mode === 'replace') { const t = s.chords[i]; s.chords[i] = s.chords[j]; s.chords[j] = t; pst().ci = j; }
+  else { const [c] = s.chords.splice(i, 1), jj = j > i ? j - 1 : j, k = mode === 'after' ? jj + 1 : jj; s.chords.splice(k, 0, c); pst().ci = k; }
+  if (s.chords[0]) s.chords[0].push = false;
+  if (pst().sec === 'Chorus') P.steps.prog = false;
+  syncLegacy(P); touch(); render(); return true;
+}
+function anyRefresh() { const P = curProj(), ps = pst(), d = Songcraft.describe(P.key, { r: ps.anyR || 0, q: ps.anyQ || 'major', b: ps.anyB === undefined || ps.anyB === '' ? null : +ps.anyB }), n = $('#anyname'), m = $('#anynum'); if (n) n.textContent = d.name; if (m) m.textContent = d.number + (d.label ? ' · ' + d.label : ''); }
+const ANY_ROOTS = P => Array.from({ length: 12 }, (_, i) => i).map(i => [i, Songcraft.describe(P.key, { r: i, q: 'major', b: null })]);
+function anyChordHtml(P) {
+  const ps = pst(), r = ps.anyR || 0, q = ps.anyQ || 'major', b = ps.anyB === undefined || ps.anyB === '' ? null : +ps.anyB, d = Songcraft.describe(P.key, { r, q, b });
+  const rOpts = ANY_ROOTS(P).map(([i, x]) => '<option value="' + i + '"' + (i === r ? ' selected' : '') + '>' + esc(E.fmt(x.root)) + (i === 0 ? ' (the key note)' : '') + '</option>').join('');
+  const qOpts = Songcraft.GROUPS.map(([g, qs]) => '<optgroup label="' + esc(g) + '">' + qs.map(k => '<option value="' + esc(k) + '"' + (k === q ? ' selected' : '') + '>' + esc(Songcraft.QLABEL[k] || k) + '</option>').join('') + '</optgroup>').join('');
+  const bOpts = '<option value="">No slash (the root)</option>' + Array.from({ length: 12 }, (_, i) => i).filter(i => i !== r).map(i => '<option value="' + i + '"' + (b === i ? ' selected' : '') + '>over ' + esc(E.fmt(Songcraft.describe(P.key, { r: i, q: 'major', b: null }).root)) + '</option>').join('');
+  return '<details class="colours" id="anycard"' + (ps.anyOpen ? ' open' : '') + '><summary>Any chord, even one outside the key</summary>' +
+    '<div class="grid3"><label class="field"><span>Root note</span><select data-bind="panyr">' + rOpts + '</select></label><label class="field"><span>Chord type</span><select data-bind="panyq">' + qOpts + '</select></label><label class="field"><span>Bass note</span><select data-bind="panyb">' + bOpts + '</select></label></div>' +
+    '<p class="tiny">This chord: <b class="mono" id="anyname">' + esc(d.name) + '</b> <span id="anynum">' + esc(d.number) + (d.label ? ' · ' + esc(d.label) : '') + '</span></p>' +
+    '<div class="row wrap"><button class="btn ghost sm" type="button" data-act="panyhear">' + icon('play') + 'Hear it</button><button class="btn primary sm" type="button" data-act="panyuse">Use this chord</button></div></details>';
+}
+
 /* ---- actions and bindings for the project screen (merged into ACTIONS and BINDS at boot) ---- */
 const mixChan = (P, el) => (el.dataset.kind === 'track' ? trackOf(P, el.dataset.k === 'guide' ? '' : el.dataset.k) : mixerOf(P)[el.dataset.k]);
 async function runExport(fn, label) {
@@ -794,6 +1006,10 @@ async function runExport(fn, label) {
   try { return await fn(); } catch (e) { if (info) info.textContent = 'That did not work: ' + (e && e.message ? e.message : e); return null; }
 }
 const PROJECT_ACTIONS = {
+  plvreset: () => { const P = curProj(); formOf(P).forEach(it => { delete it.lv; }); touch(); render(); },
+  pedhear: () => { const P = curProj(), g = gridState(P); if (!S.prefs.sound) { toast('Sound is off. Turn it on in Profile.'); return; } const a = arrangeSection(P, g.sec, { melody: false, choir: false, melInst: Snd.inst() }); playScript({ events: a.events, bpm: P.bpm, total: a.beats, kit: P.kit || 0 }); },
+  pedreset: () => { const P = curProj(), g = gridState(P); if (P.edits && P.edits[g.part]) { delete P.edits[g.part][g.sec]; if (!Object.keys(P.edits[g.part]).length) delete P.edits[g.part]; if (!Object.keys(P.edits).length) delete P.edits; } touch(); render(); },
+  pedclear: () => { const P = curProj(), g = gridState(P); P.edits = P.edits || {}; P.edits[g.part] = P.edits[g.part] || {}; P.edits[g.part][g.sec] = []; touch(); render(); },
   ptrk: el => { pst().trk = el.dataset.id || ''; render(); },
   ptrkadd: el => {
     const P = curProj(), list = tracksOf(P); if (list.length >= MAX_TRACKS) return;
@@ -808,6 +1024,37 @@ const PROJECT_ACTIONS = {
     for (const t of T.takes) await GuideStore.del(t.k).catch(() => {});
     P.tracks = tracksOf(P).filter(x => x !== T); pst().trk = ''; GuideStore.invalidate(); touch(); render();
   },
+  pbusy: el => { const P = curProj(); P.busy = Math.max(-1, Math.min(1, +el.dataset.v || 0)); touch(); render(); },
+  pbeatcard: el => { const P = curProj(); const v = el.dataset.v; P.beat = v === 'meter' ? (P.ts === 4 ? 'ballad' : 'meter') : v; touch(); render(); },
+  pbeathear: el => { const P = curProj(); if (!S.prefs.sound) { toast('Sound is off. Turn it on in Profile.'); return; } try {
+    const k = el.dataset.v, Q = Object.assign({}, P, { beat: k, loops: [], mixer: undefined }), A = arrangeSong(Q, { melody: false }), bar = meterOf(P).bar;
+    const drums = A.events.filter(e => e.drum); if (!drums.length) { toast('This beat has no drum sound yet.'); return; }
+    const best = (A.timeline || []).slice().sort((a, b) => drums.filter(e => e.t >= b.start && e.t < b.start + b.beats).length - drums.filter(e => e.t >= a.start && e.t < a.start + a.beats).length)[0];
+    let from = best ? best.start + (best.beats > bar * 3 ? bar : 0) : 0, win = drums.filter(e => e.t >= from && e.t < from + bar * 2);
+    if (win.length < 4) { from = Math.floor(drums[0].t / bar) * bar; win = drums.filter(e => e.t >= from && e.t < from + bar * 2); }
+    const ev = win.map(e => Object.assign({}, e, { t: e.t - from }));
+    playScript({ events: ev, bpm: P.bpm, total: bar * 2, swing: A.swing, kit: P.kit || 0 }, { computer: true });
+  } catch (e) { toast('Could not play this beat.'); } },
+  instcard: el => { const v = el.dataset.v; S.prefs.instrument = Snd.hasInst(v) ? v : 'piano'; touch(); Snd.releaseAll(); Snd.preview(); refreshLeslieBtn();
+    document.querySelectorAll('[data-act=instcard]').forEach(b => { const on = b.dataset.v === Snd.inst(); b.setAttribute('aria-pressed', String(on)); b.parentNode.classList.toggle('on', on); });
+    document.querySelectorAll('select[data-bind=instpick]').forEach(sel => { sel.value = Snd.inst(); }); },
+  prcheck: async () => {
+    const P = curProj(), box = $('#relresult'); if (!box) return;
+    box.innerHTML = '<p class="muted">Mixing and mastering the song to measure it… this takes a little while for a long song.</p>';
+    try { const r = await releaseCheck(P); pst().rel = { notes: r.notes, at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }; render(); }
+    catch (e) { box.innerHTML = '<p class="muted">That did not work: ' + esc(e && e.message ? e.message : String(e)) + '</p>'; }
+  },
+  pcoverpick: () => { const f = $('#coverfile'); if (f) f.click(); },
+  prelease: async () => {
+    const P = curProj(), box = $('#relresult'); if (!box) return;
+    try {
+      const r = await exportRelease(P, label => { box.innerHTML = '<p class="muted">' + esc(label) + '… this takes a little while for a long song.</p>'; });
+      if (r && r.canceled) { render(); return; }
+      pst().rel = { notes: r.notes, at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }; render();
+      toast('Release files saved: ' + r.name + (r.mp3 ? '' : ' (without the MP3)'));
+    } catch (e) { box.innerHTML = '<p class="muted">That did not work: ' + esc(e && e.message ? e.message : String(e)) + '</p>'; }
+  },
+  mxfxreset: el => { const P = curProj(), c = mixerOf(P)[el.dataset.k]; if (!c) return; c.tone = 0; c.comp = 0; c.room = 0; c.lc = 0; c.el = 0; c.em = 0; c.eh = 0; c.ef = 1000; c.duck = 0; touch(); render(); },
   mxmute: el => { const P = curProj(), c = mixChan(P, el); if (!c) return; c.mute = !c.mute; touch(); render(); },
   mxsolo: el => { const P = curProj(), c = mixChan(P, el); if (!c) return; c.solo = !c.solo; touch(); render(); },
   mxunsolo: () => { const P = curProj(), m = mixerOf(P); Object.keys(m).forEach(k => { m[k].solo = false; }); recordedTracks(P).forEach(r => { r.T.solo = false; }); touch(); render(); },
@@ -853,8 +1100,11 @@ const PROJECT_ACTIONS = {
     const P = curProj(), s = P.sections[pst().sec];
     if (s.chords.length >= MAX_SECTION_CHORDS) { toast(MAX_SECTION_CHORDS + ' chords is the most a section can hold.'); return; }
     const c = { r: +el.dataset.r, q: el.dataset.q, b: el.dataset.b === '' ? null : +el.dataset.b, beats: pst().newLen || meterOf(P).bar, push: false };
-    previewChord(P, c); insertChord(P, c);
+    previewChord(P, c); placeChord(P, c, pst().ci >= 0 ? (pst().cmode || 'after') : 'end', pst().ci);
   },
+  pcmode: el => { if (['replace', 'before', 'after'].includes(el.dataset.m)) { pst().cmode = el.dataset.m; render(); } },
+  panyhear: () => { const P = curProj(), ps = pst(); previewChord(P, { r: ps.anyR || 0, q: ps.anyQ || 'major', b: ps.anyB === undefined || ps.anyB === '' ? null : +ps.anyB, beats: meterOf(P).bar }); },
+  panyuse: () => { const P = curProj(), ps = pst(), c = { r: ps.anyR || 0, q: ps.anyQ || 'major', b: ps.anyB === undefined || ps.anyB === '' ? null : +ps.anyB, beats: pst().newLen || meterOf(P).bar }; previewChord(P, c); ps.anyOpen = true; placeChord(P, c, ps.ci >= 0 ? (ps.cmode || 'after') : 'end', ps.ci); },
   pcsel: el => { const i = +el.dataset.i; pst().ci = pst().ci === i ? -1 : i; const P = curProj(), c = P.sections[pst().sec].chords[pst().ci]; if (c) previewChord(P, c); render(); },
   pchear: () => { const P = curProj(), c = P.sections[pst().sec].chords[pst().ci]; if (c) previewChord(P, c); },
   pcmove: el => { const P = curProj(), s = P.sections[pst().sec], i = pst().ci, j = i + (+el.dataset.d); if (!s.chords[i] || !s.chords[j]) return; const t = s.chords[i]; s.chords[i] = s.chords[j]; s.chords[j] = t; if (j === 0) s.chords[0].push = false; pst().ci = j; syncLegacy(P); touch(); render(); },
@@ -886,6 +1136,7 @@ const PROJECT_ACTIONS = {
     if (P.ts === 4 && P.beat === 'meter') P.beat = 'ballad'; syncLegacy(P); touch(); render(); },
   pmidi: () => { const P = curProj(); const r = exportSongMidi(P); toast('MIDI file saved: ' + r.name); },
   pchart: el => { const P = curProj(), mode = el && el.dataset && el.dataset.mode === 'numbers' ? 'numbers' : 'names'; exportChart(P, mode); toast((mode === 'numbers' ? 'Number chart' : 'Chord chart') + ' saved. Open it to print or save as PDF.'); },
+  pperform: () => { const P = curProj(); if (P) Perform.open(P); },
   pplay: () => { const P = curProj(); const A = arrangeSong(P, { melInst: Snd.inst() }); playScript(A.script); },
   pwav: async el => {
     const P = curProj(), mix = el.dataset.mix, info = $('#expinfo');
@@ -968,6 +1219,18 @@ function previewChord(P, c) {
 const PROJECT_BINDS = {
   ptrkname: el => { const T = curTrack(curProj()); if (T && T.id) { T.name = (el.value || 'Track').slice(0, 40); touch(); render(); } },
   ptrkkind: el => { const T = curTrack(curProj()); if (T && T.id) { T.kind = TRACK_KINDS[el.value] ? el.value : 'vocal'; touch(); } },
+  mxfx: el => {
+    const P = curProj(), c = mixerOf(P)[el.dataset.k], f = el.dataset.f; if (!c || !['lc', 'el', 'em', 'ef', 'eh', 'duck'].includes(f)) return;
+    const v = +el.value; let txt;
+    if (f === 'lc') c.lc = [0, 60, 100, 160, 250].includes(v) ? v : 0;
+    else if (f === 'ef') { c.ef = Math.round(200 * Math.pow(25, Math.max(0, Math.min(100, v)) / 100)); txt = c.ef >= 1000 ? (Math.round(c.ef / 100) / 10) + ' kHz' : c.ef + ' Hz'; }
+    else if (f === 'duck') { c.duck = Math.max(0, Math.min(0.9, v / 100)); txt = Math.round(c.duck * 100) + '%'; }
+    else { c[f] = Math.max(-12, Math.min(12, Math.round(v))); txt = (c[f] > 0 ? '+' : '') + c[f] + ' dB'; }
+    const t = $('#mxfx-' + f + '-' + el.dataset.k); if (t && txt !== undefined) t.textContent = txt; touch();
+  },
+  mxtone: el => { const P = curProj(), c = mixerOf(P)[el.dataset.k]; if (!c) return; c.tone = Math.max(-1, Math.min(1, +el.value / 100)); const t = $('#mxtone-' + el.dataset.k); if (t) t.textContent = el.value; touch(); },
+  mxcomp: el => { const P = curProj(), c = mixerOf(P)[el.dataset.k]; if (!c) return; c.comp = Math.max(0, Math.min(1, +el.value / 100)); const t = $('#mxcomp-' + el.dataset.k); if (t) t.textContent = el.value + '%'; touch(); },
+  mxroom: el => { const P = curProj(), c = mixerOf(P)[el.dataset.k]; if (!c) return; c.room = Math.max(0, Math.min(1, +el.value / 100)); const t = $('#mxroom-' + el.dataset.k); if (t) t.textContent = el.value + '%'; touch(); },
   mxvol: el => { const P = curProj(), c = mixChan(P, el); if (!c) return; const v = +el.value / 100; if (el.dataset.kind === 'track') c.gain = v; else c.v = v; const t = $('#mxv-' + el.dataset.kind + el.dataset.k); if (t) t.textContent = el.value + '%'; touch(); },
   mxpan: el => { const P = curProj(), c = mixChan(P, el); if (!c) return; c.pan = +el.value / 100; const lab = el.previousElementSibling && el.previousElementSibling.querySelector('.mono'); if (lab) lab.textContent = panLabel(c.pan); touch(); },
   pmaster: el => { const P = curProj(); P.master = { target: Mastering.TARGETS[el.value] ? el.value : 'stream' }; touch(); },
@@ -979,14 +1242,27 @@ const PROJECT_BINDS = {
   phuman: el => { const P = curProj(); P.human = Math.max(0, Math.min(2, parseInt(el.value, 10) || 0)); touch(); render(); },
   pfswell: el => formSet(el, it => { it.swell = el.checked; }),
   pbpm: el => { const P = curProj(); P.bpm = +el.value; const v = $('#pbpmv'); if (v) v.textContent = P.bpm; touch(); },
+  phumankeys: el => { const P = curProj(); P.humanKeys = Math.max(0, Math.min(2, Math.round(+el.value || 0))); touch(); },
+  pperc: el => { const P = curProj(); P.perc = ['off', 'shaker', 'tambourine', 'congas', 'shakercongas'].indexOf(el.value) >= 0 ? el.value : 'off'; touch(); },
+  pkit: el => { const P = curProj(); P.kit = +el.value || 0; touch(); },
+  pautofill: el => { const P = curProj(); P.autoFill = !!el.checked; touch(); },
   pswing: el => { const P = curProj(); P.swing = +el.value; touch(); },
+  plv: el => { const P = curProj(), it = formOf(P)[+el.dataset.i]; if (!it) return; const v = +el.value, k = el.dataset.k; it.lv = Object.assign({}, it.lv || {}); if (v) it.lv[k] = v; else delete it.lv[k]; if (!Object.keys(it.lv).length) delete it.lv; touch(); render(); },
+  pedpart: el => { pst().edPart = el.value === 'drums' ? 'drums' : 'bass'; render(); },
+  pedsec: el => { pst().edSec = el.value; render(); },
+  pedlen: el => { pst().edLen = +el.value || 0.5; },
+  pbasssound: el => { const P = curProj(); P.bassSound = BASS_SOUNDS[el.value] ? el.value : 'finger'; touch(); render(); },
   pbass: el => { const P = curProj(); P.bassStyle = BASS_STYLES[el.value] ? el.value : 'root'; touch(); render(); },
   pbeat: el => { const P = curProj(); P.beat = el.value === 'meter' ? (P.ts === 4 ? 'ballad' : 'meter') : el.value; touch(); render(); },
   pcopy: el => { const P = curProj(), from = el.value; if (!from || !P.sections[from]) return; const src = P.sections[from]; P.sections[pst().sec] = { degs: src.degs.slice(), len: src.len, chords: src.chords.map(c => Object.assign({}, c)) }; pst().ci = -1; syncLegacy(P); touch(); toast('Copied the chords from the ' + from + '.'); render(); },
+  pcr: el => { const P = curProj(), c = P.sections[pst().sec].chords[pst().ci]; if (!c) return; c.r = +el.value; if (c.b === c.r) c.b = null; previewChord(P, c); if (pst().sec === 'Chorus') P.steps.prog = false; syncLegacy(P); touch(); render(); },
   pcq: el => { const P = curProj(), c = P.sections[pst().sec].chords[pst().ci]; if (!c || !Songcraft.QT[el.value]) return; c.q = el.value; previewChord(P, c); syncLegacy(P); touch(); render(); },
   pcb: el => { const P = curProj(), c = P.sections[pst().sec].chords[pst().ci]; if (!c) return; c.b = el.value === '' ? null : +el.value; previewChord(P, c); syncLegacy(P); touch(); render(); },
   pclen: el => { const P = curProj(), c = P.sections[pst().sec].chords[pst().ci]; if (!c) return; c.beats = +el.value; syncLegacy(P); touch(); render(); },
   pcpush: el => { const P = curProj(), c = P.sections[pst().sec].chords[pst().ci]; if (!c || pst().ci === 0) return; c.push = el.checked; touch(); render(); },
+  panyr: el => { pst().anyR = +el.value; if (pst().anyB === +el.value) pst().anyB = ''; pst().anyOpen = true; anyRefresh(); },
+  panyq: el => { pst().anyQ = el.value; pst().anyOpen = true; anyRefresh(); },
+  panyb: el => { pst().anyB = el.value; pst().anyOpen = true; anyRefresh(); },
   pnewlen: el => { pst().newLen = +el.value; },
   psingback: el => { pst().singBack = el.value === 'click' ? 'click' : 'chords'; },
   psnap: el => { pst().snap = el.checked; },
@@ -1007,6 +1283,8 @@ const PROJECT_BINDS = {
   pmic: el => { S.prefs.micId = el.value || undefined; if (!el.value) delete S.prefs.micId; touch(); },
   pfxpreset: el => { const P = curProj(), g = curTrack(P); if (!g || !VocalFX.PRESETS[el.value]) return; g.fx = Object.assign({}, g.fx, { preset: el.value }); GuideStore.invalidate(); touch(); render(); },
   pfxnr: el => { const P = curProj(), g = curTrack(P); if (!g) return; g.fx = Object.assign({}, g.fx, { nr: el.value in VocalFX.NR_LEVELS ? el.value : 'preset' }); GuideStore.invalidate(); touch(); },
+  pfxtune: el => { const P = curProj(), g = curTrack(P); if (!g) return; g.fx = Object.assign({}, g.fx, { tune: ['gentle', 'medium', 'full'].indexOf(el.value) >= 0 ? el.value : 'off' }); GuideStore.invalidate(); touch(); render(); },
+  pfxtunescale: el => { const P = curProj(), g = curTrack(P); if (!g) return; g.fx = Object.assign({}, g.fx, { tuneScale: el.value === 'any' ? 'any' : 'key' }); GuideStore.invalidate(); touch(); },
   pfxroom: el => { const P = curProj(), g = curTrack(P); if (!g) return; g.fx = Object.assign({}, g.fx, { reverb: el.checked }); GuideStore.invalidate(); touch(); },
   pmonitor: el => { pst().monitor = el.checked; },
   plfiles: el => { const P = curProj(); importLoops(P, Array.from(el.files || [])); el.value = ''; },

@@ -151,7 +151,7 @@ function stageAt(P, A, beat) {
   const seg = segs[si]; let ci = 0; seg.chs.forEach((c, i) => { if (beat >= c.t - 1e-6) ci = i; });
   const nx = seg.chs[ci + 1] || (segs[si + 1] && segs[si + 1].chs[0]);
   const ly = stageLyrics(P, seg.type), frac = Math.min(0.999, Math.max(0, (beat - seg.start) / seg.beats)), li = ly.length ? Math.floor(frac * ly.length) : -1;
-  return { phase: 'song', sec: seg.label + (ly.length ? ' · line ' + (li + 1) + ' of ' + ly.length : ''), now: seg.chs[ci].name, next: nx ? 'Next: ' + nx.name : '', lines: ly, li, si, type: seg.type };
+  return { phase: 'song', sec: seg.label + (ly.length ? ' · line ' + (li + 1) + ' of ' + ly.length : ''), now: seg.chs[ci].name, next: nx ? 'Next: ' + nx.name : '', nownum: seg.chs[ci].number, nextnum: nx ? 'Next: ' + nx.number : '', lines: ly, li, si, type: seg.type };
 }
 /* start: audio-clock time at which the (partial) song begins; from: the beat it begins at */
 function liveStart(P, start, from, opts) {

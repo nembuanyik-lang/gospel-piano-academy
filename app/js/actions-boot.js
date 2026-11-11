@@ -125,10 +125,14 @@ const ACTIONS = {
   },
   proftab: el => go('profile', { tab: el.dataset.t }),
   pinst: el => { S.profile.instrument = el.dataset.v; ui.courseTab = el.dataset.v === 'guitar' ? 'guitar' : 'piano'; touch(); render(); },
+  quickstage: () => { S.prefs.stage = !S.prefs.stage; touch(); applyDisplay(); toast(S.prefs.stage ? 'Stage mode on. Press Stage again to leave it.' : 'Stage mode off.'); },
+  quicktheme: () => { S.prefs.theme = isDarkNow() ? 'light' : 'dark'; touch(); applyDisplay(); },
   ptheme: el => { S.prefs.theme = el.dataset.v; touch(); applyDisplay(); render(); },
   ptext: el => { S.prefs.textSize = +el.dataset.v; touch(); applyDisplay(); render(); },
   opendata: () => { if (Desk) Desk.openDataFolder(); },
   preport: () => exportReport(),
+  sndlibpick: () => { const f = $('#sndlibfile'); if (f) f.click(); },
+  sndlibreset: async () => { await Snd.resetLibrary(); toast('Back to the built-in instrument library.'); },
   classpick: () => { const f = $('#classfiles'); if (f) f.click(); },
   classsave: () => exportClass(),
   classclear: () => { ui.classRows = []; render(); },
@@ -147,6 +151,14 @@ const BINDS = {
     } catch (e) { if (info) info.textContent = f.name + ' could not be opened: ' + (e && e.message ? e.message : e) + '.'; }
   },
   resettext: el => { ui.resetText = el.value; const b = $('#resetbtn'); if (b) b.disabled = el.value.trim().toUpperCase() !== 'RESET'; },
+  sndlibfile: async el => {
+    const f = el.files && el.files[0]; el.value = ''; if (!f) return;
+    const msg = $('#sndlibmsg'); if (msg) msg.textContent = 'Reading ' + f.name + '… a large library takes a little while.';
+    const r = await Snd.useLibrary(f);
+    if (r.error) { const m = $('#sndlibmsg'); if (m) m.textContent = r.error; toast(r.error, 'warn'); return; }
+    toast('Now using ' + r.name + ' (' + r.presets + ' instruments' + (r.drums ? ', with drum kits' : ', no drum kit: the built-in drums are used') + ').');
+    Snd.preview();
+  },
   classfiles: el => { const f = el.files; readClassFiles(f); el.value = ''; },
   csearch: el => { ui.courseQ = el.value; const box = $('#cresults'); if (box) box.innerHTML = el.dataset.kind === 'guitar' ? guitarCourseBody() : pianoCourseBody(); },
   cunfin: el => { ui.courseUnfinished = el.checked; const box = $('#cresults'); if (box) box.innerHTML = ui.courseTab === 'guitar' ? guitarCourseBody() : pianoCourseBody(); },
@@ -169,6 +181,7 @@ const BINDS = {
   obname: el => { ui.onboarding.name = el.value; },
   pname: el => { S.profile.name = el.value; touch(); chrome(); },
   pimport: el => { const f = el.files && el.files[0]; el.value = ''; readBackupFile(f); },
+  pstage: el => { S.prefs.stage = el.checked; touch(); applyDisplay(); },
   pnames: el => { S.prefs.names = el.checked; touch(); },
   instpick: el => { S.prefs.instrument = Snd.hasInst(el.value) ? el.value : 'piano'; touch(); Snd.releaseAll(); Snd.preview(); refreshLeslieBtn(); },
   memsaver: el => { S.prefs.memSaver = ['auto', 'on', 'off'].includes(el.value) ? el.value : 'auto'; touch(); },
@@ -176,7 +189,7 @@ const BINDS = {
   psound: el => { S.prefs.sound = el.checked; touch(); },
   pslow: el => { S.prefs.speed = el.checked ? 'slow' : 'normal'; touch(); }
 };
-const LIVE = new Set(['pprogname', 'pbpm', 'pswing', 'pguidegain', 'pguidenudge', 'mxvol', 'mxpan', 'pinfo', 'plgain', 'ploff', 'resettext', 'csearch', 'slbpm', 'ptitle', 'lchorus', 'lverse', 'lbridge', 'obname', 'pname']);
+const LIVE = new Set(['pprogname', 'pbpm', 'pswing', 'pguidegain', 'pguidenudge', 'mxvol', 'mxpan', 'mxtone', 'mxcomp', 'mxroom', 'mxfx', 'pinfo', 'plgain', 'ploff', 'resettext', 'csearch', 'slbpm', 'ptitle', 'lchorus', 'lverse', 'lbridge', 'obname', 'pname']);
 /* the song project studio brings its own actions and bindings (views-project.js) */
 Object.assign(ACTIONS, PROJECT_ACTIONS, VOICE_ACTIONS, GOSPEL_ACTIONS);
 Object.assign(BINDS, PROJECT_BINDS, GOSPEL_BINDS);
@@ -195,7 +208,7 @@ function buildChrome() {
     '<button type="button" class="skip-link" data-act="skipmain">Skip to main content</button>' +
     '<header class="top"><div class="top-in"><button class="brand" type="button" data-act="go" data-to="home" aria-label="Gospel Music Academy, home"><svg viewBox="0 0 28 28" width="28" height="28" aria-hidden="true"><rect x="1" y="3" width="26" height="22" rx="5" class="bm-a"/><path d="M8 3v22M14 3v22M20 3v22" class="bm-b"/><rect x="6" y="3" width="4" height="12" rx="1" class="bm-c"/><rect x="12" y="3" width="4" height="12" rx="1" class="bm-c"/><rect x="18" y="3" width="4" height="12" rx="1" class="bm-c"/></svg><span>Gospel Music Academy</span></button>' +
     '<nav class="topnav" aria-label="Main">' + NAV.map(n => '<button type="button" data-act="go" data-to="' + n[0] + '" data-nav="' + n[0] + '">' + n[1] + '</button>').join('') + '</nav>' +
-    '<div class="top-r"><button id="hxp" class="chip-xp" type="button" data-act="go" data-to="progress" aria-label="Progress"></button><button id="hav" class="avatar" type="button" data-act="go" data-to="profile" aria-label="Profile"></button></div></div></header>' +
+    '<div class="top-r"><button id="hst" class="chip-xp stagebtn" type="button" data-act="quickstage" aria-pressed="false">Stage</button><button id="hth" class="chip-xp themebtn" type="button" data-act="quicktheme"></button><button id="hxp" class="chip-xp" type="button" data-act="go" data-to="progress" aria-label="Progress"></button><button id="hav" class="avatar" type="button" data-act="go" data-to="profile" aria-label="Profile"></button></div></div></header>' +
     '<div id="savebanner" class="savebanner" role="alert" hidden></div>' +
     '<main id="main" tabindex="-1"></main>' +
     '<nav class="tabbar" aria-label="Main">' + NAV.map(n => '<button type="button" data-act="go" data-to="' + n[0] + '" data-nav="' + n[0] + '">' + icon(n[2]) + '<span>' + n[1] + '</span></button>').join('') + '</nav>' +

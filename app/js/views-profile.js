@@ -45,7 +45,17 @@ const PTABS = [['profile', 'Profile'], ['settings', 'Settings'], ['data', 'Your 
 function applyDisplay() {
   const root = document.documentElement, th = S.prefs.theme || 'system', size = S.prefs.textSize || 100;
   if (th === 'system') delete root.dataset.theme; else root.dataset.theme = th;
-  root.style.zoom = size === 100 ? '' : String(size / 100);
+  const st = !!S.prefs.stage; if (st) root.dataset.stage = '1'; else delete root.dataset.stage;
+  const zoom = size / 100 * (st ? 1.2 : 1); root.style.zoom = zoom === 1 ? '' : String(zoom);
+  const sb = document.getElementById('hst'); if (sb) { sb.setAttribute('aria-pressed', String(st)); sb.classList.toggle('on', st); sb.title = st ? 'Leave stage mode' : 'Stage mode: bigger, high-contrast'; }
+  const hb = document.getElementById('hth');
+  if (hb) { const dk = isDarkNow(); hb.textContent = dk ? '\u2600' : '\u263E'; hb.setAttribute('aria-label', dk ? 'Switch to the light theme' : 'Switch to the dark theme'); hb.title = dk ? 'Light theme' : 'Dark theme'; }
+}
+function isDarkNow() {
+  if (S.prefs && S.prefs.stage) return true;
+  const th = (S.prefs && S.prefs.theme) || 'system';
+  if (th === 'dark') return true; if (th === 'light') return false;
+  try { return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); } catch (e) { return false; }
 }
 function viewProfile() {
   const tab = PTABS.some(t => t[0] === (route.params || {}).tab) ? route.params.tab : 'profile';
@@ -62,6 +72,7 @@ function viewProfile() {
     body = '<section class="card"><h3>Display</h3><p class="eyebrow">Theme</p><div class="seg" role="group" aria-label="Theme">' + [['system', 'Same as computer'], ['light', 'Light'], ['dark', 'Dark']].map(o => '<button type="button" class="' + (th === o[0] ? 'on' : '') + '" aria-pressed="' + (th === o[0]) + '" data-act="ptheme" data-v="' + o[0] + '">' + o[1] + '</button>').join('') + '</div>' +
       '<p class="eyebrow">Text size</p><div class="seg" role="group" aria-label="Text size">' + [90, 100, 115, 130, 150].map(n => '<button type="button" class="' + (size === n ? 'on' : '') + '" aria-pressed="' + (size === n) + '" data-act="ptext" data-v="' + n + '">' + n + '%</button>').join('') + '</div>' +
       (Desk ? '<p class="tiny">You can also press Ctrl and + or Ctrl and − (Cmd on a Mac).</p>' : '') +
+      '<label class="switch"><input type="checkbox" data-bind="pstage"' + (S.prefs.stage ? ' checked' : '') + '><span>Stage mode (bigger, black and white, easy to read from a distance)</span></label>' +
       '<label class="switch"><input type="checkbox" data-bind="pnames"' + (S.prefs.names ? ' checked' : '') + '><span>Show note names on the piano</span></label></section>' +
       '<section class="card"><h3>Practice</h3><p class="eyebrow">Daily practice goal</p><div class="seg">' + [5, 10, 15, 20, 30].map(n => '<button type="button" class="' + (S.prefs.dailyMin === n ? 'on' : '') + '" data-act="pgoalmin" data-v="' + n + '">' + n + ' min</button>').join('') + '</div>' +
       '<div class="split" style="margin-top:.8rem"><p class="muted">Timing calibration: ' + (S.prefs.latencyMs ? S.prefs.latencyMs + ' ms' : 'not set') + '</p><button class="btn ghost sm" type="button" data-act="pview" data-view="calib">Calibrate</button></div></section>' +

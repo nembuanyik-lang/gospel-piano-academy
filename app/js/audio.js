@@ -156,10 +156,29 @@ const Snd = (function () {
      When it is installed, the electric piano, guitar, strings, brass, choir, flute, church organ, the Song Lab
      bass and the drums play recorded instruments from it. The grand piano keeps its own recorded samples
      (with the library's piano as the next choice), and the gospel organ is the app's own tonewheel model. */
-  const bank = { state: 'idle', sf: null, credit: '' };
+  const bank = { state: 'idle', sf: null, credit: '', own: null, ownError: '' };
+  /* a library the musician chose (any General MIDI SoundFont, .sf2), kept in the browser's storage on this computer; it is used in place of
+     the built-in library. A file that cannot be read is ignored and the built-in library is used. */
+  const OWN_KEY = 'sounds:library', OWN_MAX = 350 * 1048576;
+  const isSf2 = buf => buf.byteLength >= 12 && String.fromCharCode(...new Uint8Array(buf, 0, 4)) === 'RIFF' && String.fromCharCode(...new Uint8Array(buf, 8, 4)) === 'sfbk';
+  function describeSf(sf) {
+    const ps = sf.presets || [];
+    return { presets: ps.length, drums: ps.some(p => p.bank === 128), piano: ps.some(p => p.bank === 0 && p.program === 0) };
+  }
+  async function loadOwn() {
+    if (typeof GuideStore === 'undefined' || typeof indexedDB === 'undefined') return false;
+    let f = null; try { f = await GuideStore.get(OWN_KEY); } catch (e) { return false; }
+    if (!f || !f.arrayBuffer) return false;
+    try {
+      const buf = await f.arrayBuffer(); if (!isSf2(buf)) throw new Error('not a SoundFont');
+      bank.sf = SF2.prepare(SF2.parse(buf)); bank.own = { name: String(f.name || 'My sound library'), size: f.size || buf.byteLength }; bank.ownError = '';
+      bank.credit = 'Instruments: ' + bank.own.name + ' (your own sound library).'; bank.state = 'ready'; return true;
+    } catch (e) { bank.own = null; bank.ownError = 'Your own sound library could not be opened (' + (e && e.message ? e.message : e) + '). The built-in library is used.'; return false; }
+  }
   async function loadBank() {
     if (bank.state !== 'idle' || typeof SF2 === 'undefined') return;
     bank.state = 'loading';
+    if (await loadOwn()) { if (App.onSoundChange) App.onSoundChange(); return; }
     try {
       const res = await fetch('sounds/manifest.json', { cache: 'no-cache' });
       if (!res.ok) throw new Error('no library');
@@ -170,6 +189,27 @@ const Snd = (function () {
       bank.credit = String(man.credit || ''); bank.state = 'ready';
     } catch (e) { bank.state = 'none'; bank.sf = null; }
     if (App.onSoundChange) App.onSoundChange();
+  }
+  /* use a SoundFont file the musician chose; resolves { ok, name, size, presets, drums, piano } or { error } */
+  async function useLibrary(file) {
+    if (!file) return { error: 'No file was chosen.' };
+    if (!/\.sf2$/i.test(file.name || '')) return { error: 'Choose a SoundFont file that ends in .sf2. Other kinds (.sf3, .sfz, .dls) are not supported.' };
+    if (file.size > OWN_MAX) return { error: 'This file is ' + (file.size / 1048576).toFixed(0) + ' MB. The largest library the app accepts is ' + (OWN_MAX / 1048576) + ' MB; a bigger one would use too much memory.' };
+    if (typeof GuideStore === 'undefined') return { error: 'This copy of the app cannot keep a library.' };
+    let sf, buf;
+    try { buf = await file.arrayBuffer(); if (!isSf2(buf)) return { error: 'This file is not a SoundFont (.sf2).' }; sf = SF2.prepare(SF2.parse(buf)); } catch (e) { return { error: 'This file could not be read as a SoundFont: ' + (e && e.message ? e.message : e) }; }
+    buf = null;
+    const d = describeSf(sf); if (!d.presets) return { error: 'This SoundFont has no instruments in it.' };
+    try { await GuideStore.put(OWN_KEY, file); } catch (e) { return { error: 'The library could not be saved on this computer (' + (e && e.message ? e.message : e) + ').' }; }
+    releaseAll(); bank.sf = sf; bank.state = 'ready'; bank.own = { name: file.name, size: file.size }; bank.ownError = ''; bank.credit = 'Instruments: ' + file.name + ' (your own sound library).';
+    if (App.onSoundChange) App.onSoundChange();
+    return Object.assign({ ok: true, name: file.name, size: file.size }, d);
+  }
+  /* go back to the built-in library */
+  async function resetLibrary() {
+    try { if (typeof GuideStore !== 'undefined') { const hold = GuideStore.hold; GuideStore.hold = false; await GuideStore.del(OWN_KEY); GuideStore.hold = hold; } } catch (e) { /* ignore */ }
+    releaseAll(); bank.state = 'idle'; bank.sf = null; bank.own = null; bank.ownError = ''; bank.credit = '';
+    await loadBank();
   }
   const bankReady = () => bank.state === 'ready' && !!bank.sf;
   const exclusive = new WeakMap();   // per audio context: an open hi-hat is cut by the closed one
@@ -185,12 +225,16 @@ const Snd = (function () {
     return true;
   }
   /* drums from the library: the Song Lab's kick, snare, hi-hats and rim on the standard kit */
-  const DRUM_KEYS = { k: 36, s: 38, h: 42, o: 46, r: 37, cl: 39, c: 49, th: 50, tm: 47, tl: 43 };
+  const DRUM_KEYS = { k: 36, s: 38, h: 42, o: 46, r: 37, cl: 39, c: 49, th: 50, tm: 47, tl: 43, sh: 82, tb: 54, cg: 63, cd: 64 };
+  /* the drum kit of the library: 0 Standard, 8 Room, 16 Power, 24 Electronic, 32 Jazz, 40 Brush (a kit the library lacks falls back to Standard) */
+  const KITS = [0, 8, 16, 24, 32, 40]; let kitProg = 0;
+  const setKit = n => { kitProg = KITS.indexOf(+n) >= 0 ? +n : 0; };
   function bankDrum(c, when, type, vel, dest) {
     if (!bankReady() || !DRUM_KEYS[type]) return false;
     try {
       const g = c.createGain(); g.connect(dest);
-      const r = SF2.voice(c, g, bank.sf, 128, 0, DRUM_KEYS[type], Math.round(clamp(vel || 0.7, 0.05, 1) * 127), when, 0.9 * BANK_GAIN, exclFor(c));
+      const hit = prog => SF2.voice(c, g, bank.sf, 128, prog, DRUM_KEYS[type], Math.round(clamp(vel || 0.7, 0.05, 1) * 127), when, 0.9 * BANK_GAIN, exclFor(c));
+      let r = hit(kitProg); if (!r.count && kitProg !== 0) r = hit(0);
       if (!r.count) { g.disconnect(); return false; }
       r.nodes.forEach(n => { try { n.stop(when + 4); } catch (e) { /* ignore */ } });
       g.gain.setValueAtTime(1, when + 3.5); g.gain.linearRampToValueAtTime(0, when + 3.95);
@@ -360,6 +404,8 @@ const Snd = (function () {
   INSTR.brasssec = { label: 'Brass section', hint: 'Trumpets, trombones and horns together, for hits and pads.', chordy: true, gm: 61, needsBank: true, build: (...a) => INSTR.brass.build(...a) };
   INSTR.pad = { label: 'Warm pad', hint: 'A soft synth pad for worship moments.', chordy: true, gm: 89, needsBank: true, build: (...a) => INSTR.strings.build(...a) };
   INSTR.bass = { label: 'Bass guitar', hint: 'Fingered electric bass (used by the Song Lab).', chordy: false, gm: 33, needsBank: true, hidden: true, build: (...a) => INSTR.guitar.build(...a) };
+  [['pick', 34], ['upright', 32], ['fretless', 35], ['slap', 36], ['synth', 38], ['sub', 39]].forEach(([id, gm]) => { INSTR['bass_' + id] = Object.assign({}, INSTR.bass, { gm }); });
+  const bassIns = e => (e.bassIns && INSTR[e.bassIns] ? e.bassIns : 'bass');
   const TRIM = { pipe: [0.67, 1.10], brasssec: [0.49, 1.08], pad: [0.67, 1.10], bass: [0.9, 0.9], epiano: [0.395, 0.62], organ: [0.74, 0.79], strings: [0.67, 1.10], brass: [0.49, 1.08], choir: [1.29, 2.85], flute: [0.26, 0.26] };   // loudness match to the piano (full voice, light voice)
   const instId = () => (S.prefs && INSTR[S.prefs.instrument] ? S.prefs.instrument : 'piano');
   const instList = () => Object.keys(INSTR).filter(id => !INSTR[id].hidden && (!INSTR[id].needsBank || bankReady() || (S.prefs && S.prefs.instrument === id)))
@@ -517,6 +563,13 @@ const Snd = (function () {
       o.connect(g); g.connect(dest); o.start(when); o.stop(when + 0.5);
       return;
     }
+    if (type === 'cg' || type === 'cd') {   // congas: a short pitched drop, higher for the open high conga
+      const f0 = type === 'cg' ? 340 : 250, o = c.createOscillator(), g = c.createGain();
+      o.frequency.setValueAtTime(f0, when); o.frequency.exponentialRampToValueAtTime(f0 * 0.8, when + 0.12);
+      g.gain.setValueAtTime(0.0001, when); g.gain.exponentialRampToValueAtTime(0.8 * v, when + 0.003); g.gain.exponentialRampToValueAtTime(0.0001, when + 0.2);
+      o.connect(g); g.connect(dest); o.start(when); o.stop(when + 0.24);
+      return;
+    }
     if (type === 'k') {
       const o = c.createOscillator(), g = c.createGain();
       o.frequency.setValueAtTime(150, when); o.frequency.exponentialRampToValueAtTime(42, when + 0.12);
@@ -546,6 +599,8 @@ const Snd = (function () {
       f.type = 'bandpass'; f.frequency.value = 1200; f.Q.value = 1.1; dur = 0.13; lvl = 0.9 * v;
       [0, 0.011, 0.022].forEach(o => { const s2 = c.createBufferSource(), g2 = c.createGain(), f2 = c.createBiquadFilter(); s2.buffer = noiseBuf; f2.type = 'bandpass'; f2.frequency.value = 1200; f2.Q.value = 1.1; g2.gain.setValueAtTime(0.7 * v, when + o); g2.gain.exponentialRampToValueAtTime(0.001, when + o + 0.01); s2.connect(f2); f2.connect(g2); g2.connect(dest); s2.start(when + o, 0, 0.02); });
     }
+    else if (type === 'sh') { f.type = 'highpass'; f.frequency.value = 5500; dur = 0.07; lvl = 0.42 * v; }   // a shaker
+    else if (type === 'tb') { f.type = 'highpass'; f.frequency.value = 8500; dur = 0.11; lvl = 0.5 * v; }   // a tambourine
     else { f.type = 'highpass'; f.frequency.value = 7000; dur = 0.05; lvl = 0.5 * v; }
     g.gain.setValueAtTime(0.0001, when); g.gain.exponentialRampToValueAtTime(Math.max(0.001, lvl), when + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
     ns.connect(f); f.connect(g); g.connect(dest); ns.start(when, 0, dur + 0.02);
@@ -554,21 +609,79 @@ const Snd = (function () {
   /* the mixer: each part of the backing gets its own volume and place left-right. mix = { chords: { v, pan }, bass,
      drums, melody, choir, loops } (v already includes mute and solo) */
   const partOf = e => (e.click ? 'click' : e.loop ? 'loops' : e.drum ? 'drums' : e.choir ? 'choir' : e.mel ? 'melody' : e.part === 'bass' ? 'bass' : 'chords');
-  function mixRouter(c, base, mix) {
+  /* a small level reader on each part while the song plays (taps the part's gain; it adds no sound).
+     partLevel('drums') is the recent peak, 0 to 1, or -1 when that part is not playing. */
+  let liveMeters = {};
+  function tapMeter(c, node, key) {
+    try { const ex = liveMeters[key]; if (ex && ex.c === c) { node.connect(ex.an); return; } const an = c.createAnalyser(); an.fftSize = 512; node.connect(an); liveMeters[key] = { an, c, buf: new Float32Array(an.fftSize), hold: 0 }; } catch (e) { /* no meter */ }
+  }
+  function partLevel(key) {
+    const m = liveMeters[key]; if (!m) return -1;
+    m.an.getFloatTimeDomainData(m.buf); let pk = 0; for (let i = 0; i < m.buf.length; i++) { const a = Math.abs(m.buf[i]); if (a > pk) pk = a; }
+    return pk;
+  }
+  /* each part of the backing: gain, then (when used) tone, evening-out, place left-right, and an extra room send.
+     m = { v, pan, tone (-1 warm .. 1 bright), comp (0..1), room (0..1) } */
+  function partChain(c, m, base, hall) {
+    const g = c.createGain(); g.gain.value = m.v == null ? 1 : m.v; let n = g;
+    if (m.duck > 0) { const dk = c.createGain(); n.connect(dk); n = dk; g._duck = dk; }   // makes room for the kick drum: dipped by route.kick
+    if (m.lc > 0) { const hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = Math.max(20, Math.min(500, m.lc)); hp.Q.value = 0.7; n.connect(hp); n = hp; }
+    if (m.el || m.em || m.eh) {   // a three-band EQ: bass shelf, one movable middle band, treble shelf
+      const lo = c.createBiquadFilter(), mid = c.createBiquadFilter(), hi = c.createBiquadFilter(), cl = x => Math.max(-12, Math.min(12, x || 0));
+      lo.type = 'lowshelf'; lo.frequency.value = 120; lo.gain.value = cl(m.el);
+      mid.type = 'peaking'; mid.frequency.value = Math.max(150, Math.min(6000, m.ef || 1000)); mid.Q.value = 1; mid.gain.value = cl(m.em);
+      hi.type = 'highshelf'; hi.frequency.value = 6000; hi.gain.value = cl(m.eh);
+      n.connect(lo); lo.connect(mid); mid.connect(hi); n = hi;
+    }
+    if (m.tone) {
+      const lo = c.createBiquadFilter(), hi = c.createBiquadFilter(), t = Math.max(-1, Math.min(1, m.tone));
+      lo.type = 'lowshelf'; lo.frequency.value = 220; lo.gain.value = -6 * t;      // warm: more low end, less top
+      hi.type = 'highshelf'; hi.frequency.value = 3800; hi.gain.value = 6 * t;
+      n.connect(lo); lo.connect(hi); n = hi;
+    }
+    if (m.comp) {
+      const a = Math.max(0, Math.min(1, m.comp)), k = c.createDynamicsCompressor(), mk = c.createGain();
+      k.threshold.value = -14 - 16 * a; k.knee.value = 14; k.ratio.value = 2 + 4 * a; k.attack.value = 0.012; k.release.value = 0.22;
+      mk.gain.value = 1 + 0.9 * a;   // the evened-out part is brought back to about the same level
+      n.connect(k); k.connect(mk); n = mk;
+    }
+    if (m.pan && c.createStereoPanner) { const p = c.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, m.pan)); n.connect(p); n = p; }
+    n.connect(base);
+    if (m.room > 0 && hall) { try { const send = c.createGain(); send.gain.value = 0.45 * Math.min(1, m.room); n.connect(send); send.connect(hall); } catch (e) { /* no room */ } }
+    return g;
+  }
+  /* one shared extra room for every part that uses it (one convolver, not one for each part: much cheaper to render) */
+  function sharedHall(c, base) {
+    try { const ir = makeImpulse(c, 'hall'), conv = c.createConvolver(), inp = c.createGain(); if (!ir) return null; conv.buffer = ir; inp.connect(conv); conv.connect(base); return inp; } catch (e) { return null; }
+  }
+  function mixRouter(c, base, mix, live) {
     if (!mix) return () => base;
-    const nodes = {};
-    return e => {
-      const k = partOf(e), m = mix[k]; if (!m) return base;
+    const nodes = {}; let hall = null;
+    const node = k => {
+      const m = mix[k]; if (!m) return null;
       if (!nodes[k]) {
-        const g = c.createGain(); g.gain.value = m.v == null ? 1 : m.v; let n = g;
-        if (m.pan && c.createStereoPanner) { const p = c.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, m.pan)); g.connect(p); n = p; }
-        n.connect(base); nodes[k] = g;
+        if (m.room > 0 && !hall) hall = sharedHall(c, base);
+        const g = partChain(c, m, base, hall);
+        if (live) tapMeter(c, g, 'part:' + k);
+        nodes[k] = g;
       }
       return nodes[k];
     };
+    const route = e => node(partOf(e)) || base;
+    /* a kick drum at time t: every part that is set to make room for it dips for a moment (sidechain) */
+    route.kick = (t, spb) => {
+      Object.keys(mix).forEach(k => {
+        const m = mix[k]; if (!m || !(m.duck > 0) || k === 'drums') return;
+        const g = node(k), dk = g && g._duck; if (!dk) return;
+        const low = 1 - Math.min(0.95, m.duck), rel = Math.min(0.28, Math.max(0.08, 0.45 * spb));
+        try { dk.gain.setValueAtTime(1, t); dk.gain.linearRampToValueAtTime(low, t + 0.012); dk.gain.linearRampToValueAtTime(1, t + rel); } catch (err) { /* ignore */ }
+      });
+    };
+    return route;
   }
   function audioOut(c, a, dest) {   // one recorded clip: its volume and place left-right (and, with the memory saver, its vocal sound live)
     const g = c.createGain(); g.gain.value = a.gain == null ? 1 : a.gain;
+    if (a.track !== undefined && c === ctx) tapMeter(c, g, 'track:' + (a.track || 'guide'));
     if (a.chain && typeof VocalFX !== 'undefined') { const ch = VocalFX.liveChain(c, a.chain, { room: a.room }); ch.output.connect(g); const pre = c.createGain(); pre.connect(ch.input); return audioTail(c, a, g, dest, pre); }
     return audioTail(c, a, g, dest, g);
   }
@@ -578,7 +691,7 @@ const Snd = (function () {
   }
   function play(script, o) {
     o = o || {};
-    stopAll();
+    stopAll(); liveMeters = {}; setKit(script && script.kit);
     if (!S.prefs.sound && !o.force) { if (App.toast) App.toast('Sound is off. Turn it on in Profile.'); if (o.onEnd) o.onEnd(); return { stop() {}, silent: true }; }
     const c = ensure();
     if (!c) { if (App.toast) App.toast('Sound is not available on this device.'); if (o.onEnd) o.onEnd(); return { stop() {}, silent: true }; }
@@ -588,7 +701,7 @@ const Snd = (function () {
     const timers = new Set(); let stopped = false, ended = false, pumpId = null;
     const later = (fn, ms) => { const id = setTimeout(() => { timers.delete(id); fn(); }, Math.max(0, ms)); timers.add(id); };
     const loopBeats = Math.max(1, Math.ceil(script.total));
-    const evs = script.events.slice().sort((x, y) => x.t - y.t);
+    const evs = script.events.filter(e => e.gx !== 0).sort((x, y) => x.t - y.t);   // gx 0 = silenced in this part of the song
     const AHEAD = 1.5;                       // seconds of music kept scheduled in advance
     let passStart = c.currentTime + 0.08, idx = 0, lastPass = false, endAt = 0;
     if (o.onStart) { try { o.onStart(passStart, c, bus); } catch (e) { console.error(e); } }
@@ -598,16 +711,16 @@ const Snd = (function () {
       try { const src = c.createBufferSource(); src.buffer = a.buf; src.connect(audioOut(c, a, dbus)); const at = t + a.at * spb; src.start(Math.max(at, c.currentTime), Math.max(0, (a.offset || 0) + Math.max(0, c.currentTime - at)), Math.max(0.01, a.dur * spb)); } catch (e) { /* ignore */ }
     });
     placeAudio(passStart);
-    const route = mixRouter(c, bus, script.mix);
+    const route = mixRouter(c, bus, script.mix, true);
     if (script.fade && !o.loop) [bus, dbus].forEach(b => { const a = passStart + script.fade.from * spb, z = passStart + script.fade.to * spb; b.gain.setValueAtTime(1, Math.max(a, c.currentTime)); b.gain.linearRampToValueAtTime(0.0001, Math.max(z, c.currentTime + 0.05)); });
     function end() { if (ended) return; ended = true; if (o.onEnd) o.onEnd(); }
     function schedule(e, t) {
       const d = Math.max(0.12, e.d * spb);
-      if (e.drum) drumHit(t, e.drum, e.vel, route(e), c, e.d * spb);
+      if (e.drum) drumHit(t, e.drum, e.vel * (e.gx == null ? 1 : e.gx), route(e), c, e.d * spb); if (e.drum === 'k' && route.kick) route.kick(t, spb);
       else if (e.click) click(t, e.click === 2, bus);
       else if (e.notes && e.notes.length) {
-        const lvl = 0.62 / Math.sqrt(Math.max(1, e.notes.length * 0.8));
-        const ins = e.part === 'bass' && bankReady() ? 'bass' : e.inst || (typeof o.inst === 'function' ? o.inst() : o.inst) || 'piano';
+        const lvl = 0.62 / Math.sqrt(Math.max(1, e.notes.length * 0.8)) * (e.gx == null ? 1 : e.gx);
+        const ins = e.part === 'bass' && bankReady() ? bassIns(e) : e.inst || (typeof o.inst === 'function' ? o.inst() : o.inst) || 'piano';
         const dst = route(e); e.notes.forEach(m => { const v = buildVoice(c, dst, m, t, e.vel || 0.68, lvl, true, ins); release(v, t + d); });
       }
       if (o.onStep && !e.drum) {
@@ -682,7 +795,8 @@ const Snd = (function () {
     ensure, setOutput: applyOut, now: () => (ctx ? ctx.currentTime : 0), note, noteOn, noteOff, pedal, pedalState: () => pedalDown, pedalSrcHas: s => pedalSrc.has(s),
     play, stopAll, metro, tone: (m, d) => { const c = ensure(); if (c) { const v = buildVoice(c, master, m, c.currentTime, 0.7, 0.62); release(v, c.currentTime + (d || 1)); } },
     info: () => ({ mode: sample.state === 'ready' ? 'recorded' : 'synth', credit: sample.credit, loading: sample.state === 'loading', state: sample.state,
-      bank: bank.state, bankCredit: bank.credit, room: roomId() }),
+      bank: bank.state, bankCredit: bank.credit, bankOwn: bank.own, bankError: bank.ownError, room: roomId() }),
+    useLibrary, resetLibrary,
     rooms: () => Object.keys(ROOMS).map(id => ({ id, label: ROOMS[id].label })), room: roomId, setRoom,
     leslie, leslieFast: () => leslieFast, _bank: () => bank, _loadBank: f => { bank.state = 'ready'; bank.sf = f ? SF2.prepare(f) : null; if (!f) bank.state = 'none'; },
     _buildVoice: buildVoice, _ctx: () => ctx, reset: resetContext, releaseAll, _release: release, held: () => live.size + sustained.size,
@@ -695,7 +809,7 @@ const Snd = (function () {
       (clips || []).forEach(a => { if (!a.buf) return; try { const src = c.createBufferSource(); src.buffer = a.buf; src.connect(audioOut(c, a, bus)); const at = t0 + a.at * spb; src.start(Math.max(at, c.currentTime), Math.max(0, (a.offset || 0) + Math.max(0, c.currentTime - at)), Math.max(0.01, a.dur * spb)); srcs.push(src); } catch (e) { /* ignore */ } });
       return { stop() { try { bus.gain.setTargetAtTime(0, c.currentTime, 0.03); } catch (e) { /* ignore */ } setTimeout(() => { srcs.forEach(x => { try { x.stop(); } catch (e) { /* ignore */ } }); try { bus.disconnect(); } catch (e) { /* ignore */ } }, 300); } };
     },
-    impulse: (c, kind) => makeImpulse(c, kind), meter: () => { ensure(); return meterNode; }, partOf, dryBus: () => { ensure(); return outBus; },
+    impulse: (c, kind) => makeImpulse(c, kind), meter: () => { ensure(); return meterNode; }, partLevel, setKit, partOf, dryBus: () => { ensure(); return outBus; },
     playBuffer(buf, when, gain, dest) {
       const c = ensure(); if (!c || !buf) return null;
       const src = c.createBufferSource(), g = c.createGain(); src.buffer = buf; g.gain.value = gain == null ? 1 : gain;
@@ -713,6 +827,7 @@ const Snd = (function () {
       const comp = c.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.2;
       const fin = c.createGain(); fin.connect(c.destination); comp.connect(fin); mst.connect(comp);
       roomBus(c, mst, comp);
+      setKit(script && script.kit);
       const t0 = 0.05, route = mixRouter(c, mst, script.mix);
       // finished notes and drum hits are taken out of the sound graph every two seconds of audio, so a long song
       // costs the same per second as a short one (otherwise every note ever played keeps being processed)
@@ -722,15 +837,15 @@ const Snd = (function () {
       // notes are added to the graph just before they are needed (two seconds at a time) and taken out when they have
       // finished: the browser processes every connected node on every slice of audio, even ones that start later,
       // so adding a whole song at once makes the export slower and slower as the song gets longer
-      const evs = script.events.map(e => ({ e, t: t0 + e.t * spb })).sort((x, y) => x.t - y.t);
+      const evs = script.events.filter(e => e.gx !== 0).map(e => ({ e, t: t0 + e.t * spb })).sort((x, y) => x.t - y.t);
       let ix = 0;
       const place = ({ e, t }) => {
         const d = Math.max(0.12, e.d * spb);
-        if (e.drum) { const hb = c.createGain(); hb.connect(route(e)); drumHit(t, e.drum, e.vel, hb, c, e.d * spb); retire(hb, t + Math.max(0, e.d * spb) + (e.drum === 'c' || e.drum === 'o' ? 4 : 2.5)); }
+        if (e.drum) { const hb = c.createGain(); hb.connect(route(e)); drumHit(t, e.drum, e.vel * (e.gx == null ? 1 : e.gx), hb, c, e.d * spb); if (e.drum === 'k' && route.kick) route.kick(t, spb); retire(hb, t + Math.max(0, e.d * spb) + (e.drum === 'c' || e.drum === 'o' ? 4 : 2.5)); }
         else if (e.click) click(t, e.click === 2, mst, c);
         else if (e.notes && e.notes.length) {
-          const lvl = 0.62 / Math.sqrt(Math.max(1, e.notes.length * 0.8));
-          const ins = e.part === 'bass' && bankReady() ? 'bass' : e.inst || (typeof o.inst === 'function' ? o.inst() : o.inst) || 'piano';
+          const lvl = 0.62 / Math.sqrt(Math.max(1, e.notes.length * 0.8)) * (e.gx == null ? 1 : e.gx);
+          const ins = e.part === 'bass' && bankReady() ? bassIns(e) : e.inst || (typeof o.inst === 'function' ? o.inst() : o.inst) || 'piano';
           const dst = route(e); e.notes.forEach(m => { const v = buildVoice(c, dst, m, t, e.vel || 0.68, lvl, false, ins); release(v, t + d); retire(v.vg, (v.end || t + d + 2) + 0.05, v.out !== dst ? v.out : null); });
         }
       };

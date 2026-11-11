@@ -1,5 +1,58 @@
 # Changelog
 
+## 2.12.0 — More bass, edit by hand, levels through the song, and a real mixer EQ
+
+- **Bass**: seven new styles (slow worship, reggae, highlife, funk, Motown, Latin tumbao, Bikutsi/Assiko) as bar patterns
+  (`BASS_PATTERNS`, 4/4 only) and seven bass sounds (`BASS_SOUNDS`: finger, pick, upright, fretless, slap, synth, sub; General
+  MIDI programs in the library, `P.bassSound`, `e.bassIns`). Fixed: the Gospel, Octave pump and Makossa styles were reset to
+  plain when a backup or saved project was loaded (`bassStyle` list in sanitize.js).
+- **Edit by hand** (views-grid.js): a click grid for the bass and the drums of one section (`P.edits`, `autoPart`, `cleanEdits`).
+  A changed section plays exactly as drawn (moved with key changes); "Back to automatic" restores the generator. Not used on
+  a last pass that gets a lead-in, or on tags.
+- **Levels through the song**: Mix tab table of part x form item, Silent / -6 / -3 / 0 / +3 / +6 dB (`form[].lv`, `cleanLevels`).
+  Band events carry `gx` (silent events are not scheduled at all); recorded tracks and audio loops are cut at the form
+  boundaries with their own gain (`levelSegments`, `splitByLevels`). Steps, not fades.
+- **Mixer EQ per part**: low cut (60 to 250 Hz), bass shelf, movable middle band and treble shelf (-12 to +12 dB), and "duck under
+  the kick" (`lc, el, em, ef, eh, duck`; `partChain`, `route.kick`). Ducking needs the drums to play; stems are made without it.
+- Tests: new e2e for bass, edit by hand, levels, EQ, duck (rendered audio measured); the stress song now uses EQ and duck on parts.
+
+## 2.11.0 — A studio mixer, release-ready exports, a real drummer, pitch correction, Stage mode and Perform
+
+- **Studio mixer**: coloured strips with vertical faders and level meters; per part Tone (low/high shelf), Even out
+  (compressor) and Extra room (one shared convolver send); "Song at a glance" overview with a moving playhead.
+  `mixerOf` gains `tone`, `comp`, `room`; `partChain` and `sharedHall` in audio.js.
+- **Ready to upload** (YouTube, Spotify, distributors): `releaseCheck` (loudness in LUFS, true peak, length, silence,
+  mono/stereo), `coverNotes` (cover size and type), release export as a ZIP (24-bit WAV, MP3 when available, cover,
+  README). Targets: stream −14, gentle −16, loud −10 LUFS.
+- **Picture cards** for drum beats and instruments with a "Hear it" button.
+- **Drummer**: Busyness, extra percussion, kits (SoundFont drum bank), automatic fills; **human feel** for chords, bass and
+  melody (`humanizeKeys`: off / light / loose).
+- **Your own sound library**: Profile > Settings can load a .sf2 (up to 350 MB) in place of the built-in sounds;
+  "Go back to the built-in sounds" restores them. The piano and organ are unaffected.
+- **Pitch correction** (new `pitchfix.js`, also run in the vocal worker): Off / Gentle / Medium / Full, towards the
+  song's key or any note. Notes within half a semitone are moved by the chosen amount; vibrato, slides and timing are
+  kept; untouched audio stays bit-exact; included in every export. Song field `fx.tune`, `fx.tuneScale`.
+- **Stage mode**: header button and Settings switch. Black and white, 20% larger, strong outlines (`prefs.stage`).
+- **Perform**: full-screen black view (views-perform.js) with big current and next chord, bars, lyrics, part buttons,
+  count-in and a big Play/Stop; screen kept awake where supported.
+- **Home**: a "Your path" lesson line (last two done, current, next four).
+- **Quick theme button** in the header.
+
+## 2.10.1 — Change any chord, and a much stronger phone remote
+
+- **Chord editing**: "When you tap a chord in the lists below" is Replace the chosen chord, Add before it, or Add after
+  it (`placeChord`). A replaced chord starts fresh (plain, no push) and keeps its place and length. The chord editor has a
+  Root note choice (C to A and so on), and "Any chord, even one outside the key" picks any of the 12 roots with every
+  chord type and bass note.
+- **Drag and drop** (mouse, pen and touch; touch needs a short hold): drop a chord chip on a chord of the strip (left
+  third before, right third after, middle replace), or drag strip chords to reorder (before, after, swap). The page
+  scrolls when a drag reaches the top or bottom edge.
+- **Phone remote**: new commands part, next, prev, restart, countin, key, mix, mute, solo, unsolo, song, undo. The server
+  (`cleanCommand` in lanremote.js) accepts only those names with strictly checked arguments; extra fields are dropped.
+  Deleting, overwriting and saving stay on the computer. While recording, only Stop works. The phone page has parts,
+  key, mixer, song list, display choices (names or numbers, chords or words, text size) and a level meter.
+  Play from a part uses `scriptFrom`; the count-in uses `withCountIn`.
+
 ## 2.10.0 — Seeing and fixing recordings, tabs, phone remote, learn from a recording, drums and chords
 
 - **Chords in every flavour**: a "Chord flavour" row (Plain, 7th, 9th, Add9, Sus4, Sus2, 6th, Gospel colour) turns the

@@ -119,6 +119,42 @@ const Mastering = (() => {
     }
     return { channels: y, lufs: loudness(y, sr), before, tp: dB(truePeak(y)), gainDb, target: o.target || 'stream' };
   }
-  return { TARGETS, kWeight, loudness, truePeak, glue, limiter, master, dB };
+
+  /* ---- release check: plain-words notes about a finished (mastered) song, and about a cover picture ----
+     facts: { seconds, rawPeakDb (the mix before mastering), clipped (samples at the ceiling before mastering), headSec, tailSec (silence at
+     the start and end), before (LUFS before mastering), lufs, tp (after mastering), target ('stream'|'gentle'|'loud'|'off'), sampleRate }
+     Each note: { level: 'ok' | 'warn' | 'bad', title, text } */
+  const mmss = s => Math.floor(s / 60) + ':' + String(Math.round(s % 60)).padStart(2, '0');
+  function releaseNotes(f) {
+    const n = [], add = (level, title, text) => n.push({ level, title, text }), T = TARGETS[f.target] || TARGETS.stream;
+    if (!(f.seconds > 0)) { add('bad', 'No sound', 'The song came out silent. Check that the parts are not muted and that the volumes are up in the Mix tab.'); return n; }
+    if (f.seconds < 30) add('warn', 'Very short (' + mmss(f.seconds) + ')', 'Spotify counts a play only after 30 seconds, and some distributors want at least 30 seconds. Add a verse or repeat the chorus.');
+    else add('ok', 'Length ' + mmss(f.seconds), 'A good length for a single.');
+    if (f.target === 'off' || !T.lufs) add('warn', 'Mastering is off', 'Without mastering the song may play much quieter or louder than other songs. Choose Streaming (−14 LUFS) in the mastering list.');
+    else if (Math.abs(f.lufs - T.lufs) <= 1) add('ok', 'Loudness ' + f.lufs.toFixed(1) + ' LUFS', 'On target (' + T.lufs + ' LUFS). It will play at the same level as other songs.');
+    else add('warn', 'Loudness ' + f.lufs.toFixed(1) + ' LUFS', 'The target is ' + T.lufs + ' LUFS. The song could not reach it without distorting; lower the loudest part in the Mix tab and check again.');
+    if (T.lufs && f.before !== undefined && f.before < -34) add('warn', 'The mix is very quiet', 'Before mastering it was ' + f.before.toFixed(1) + ' LUFS, so mastering had to add a lot (' + (f.lufs - f.before).toFixed(0) + ' dB) and that also raises noise. Check that no part is muted or turned far down.');
+    if (f.tp <= -0.9) add('ok', 'Peak ' + f.tp.toFixed(1) + ' dBTP', 'Safe: it will not distort when the platforms convert the file.');
+    else add('bad', 'Peak ' + f.tp.toFixed(1) + ' dBTP', 'Too close to the ceiling. It can distort after conversion. Set mastering to Streaming and check again.');
+    if (f.clipped > 0 || f.rawPeakDb > -0.1) add('warn', 'The mix is too loud before mastering', (f.clipped || 0) + ' moments hit the ceiling, which is distortion that mastering cannot remove. Lower the loudest part in the Mix tab (look for the red meter).');
+    else add('ok', 'No distortion in the mix', 'The parts add up with room to spare.');
+    if (f.headSec > 2) add('warn', 'Silence at the start (' + f.headSec.toFixed(1) + ' s)', 'Listeners may think nothing is playing. Start the song sooner.');
+    if (f.tailSec > 5) add('warn', 'Silence at the end (' + f.tailSec.toFixed(1) + ' s)', 'A long empty ending. Shorten it or let the last chord ring out.');
+    else if (f.headSec <= 2) add('ok', 'Clean start and end', 'No long silence at the start or end.');
+    if (f.sampleRate && f.sampleRate !== 44100) add('warn', 'Sample rate ' + f.sampleRate + ' Hz', 'Distributors expect 44,100 Hz. They will convert it, which is usually fine.');
+    return n;
+  }
+  function coverNotes(w, h, type, bytes) {
+    const n = [], add = (level, title, text) => n.push({ level, title, text });
+    if (!(w > 0 && h > 0)) { add('bad', 'This file is not a picture I can read', 'Choose a JPG or PNG.'); return n; }
+    if (!/^image\/(jpeg|png)$/.test(type || '')) add('bad', 'Wrong file type', 'Distributors accept JPG or PNG. Save the picture as one of those.'); else add('ok', 'File type ' + (type === 'image/png' ? 'PNG' : 'JPG'), 'Accepted everywhere.');
+    if (w !== h) add('bad', 'Not square (' + w + ' × ' + h + ')', 'Cover art must be a perfect square. Crop it to the same width and height.');
+    else if (w >= 3000) add('ok', 'Size ' + w + ' × ' + h, 'Meets the 3000 × 3000 that Spotify, Apple Music and the distributors ask for.');
+    else if (w >= 1400) add('warn', 'Size ' + w + ' × ' + h, 'Accepted by many distributors, but 3000 × 3000 is the safe size. Use a larger picture if you have one.');
+    else add('bad', 'Too small (' + w + ' × ' + h + ')', 'Use at least 1400 × 1400, and 3000 × 3000 if possible.');
+    if (bytes > 10 * 1048576) add('warn', 'Large file (' + (bytes / 1048576).toFixed(1) + ' MB)', 'Some distributors limit the cover to about 10 MB. Save it again at a lower quality if it is refused.');
+    return n;
+  }
+  return { TARGETS, kWeight, loudness, truePeak, glue, limiter, master, dB, releaseNotes, coverNotes };
 })();
 if (typeof module !== 'undefined') module.exports = Mastering;

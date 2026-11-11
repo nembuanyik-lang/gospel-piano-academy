@@ -1,8 +1,32 @@
 'use strict';
 /* ---------------------------------------------------------------- version, what's new, credits
    APP_VERSION must match "version" in package.json (a unit test checks this). */
-const APP_VERSION = '2.10.0';
+const APP_VERSION = '2.12.0';
 const CHANGES = [
+  { v: '2.12.0', title: 'More bass, edit by hand, levels through the song, and a real mixer EQ', items: [
+    'Seven new bass styles (slow worship, reggae, highlife, funk, Motown, Latin tumbao, Bikutsi/Assiko) and seven bass sounds (finger, pick, upright, fretless, slap, synth and sub). The bass sounds need the sound library.',
+    'Fixed: the Gospel, Octave pump and Makossa bass styles went back to a plain bass when a saved song or backup was opened.',
+    'Edit by hand (Arrange tab): click a grid to add or remove bass notes and drum hits in one part of the song. "Back to automatic" gives it back.',
+    'Levels through the song (Mix tab): make any part, or your recorded vocal, softer, louder or silent in one part of the song, such as the keys out in the bridge.',
+    'Mixer: every part has a low cut, a three-band EQ and "Duck under the kick drum" for a clearer low end. Open "Sound" on a strip.'
+  ] },
+  { v: '2.11.0', title: 'A studio mixer, ready-to-upload songs, a real drummer, pitch correction, Stage mode and Perform', items: [
+    'Song Lab mixer: coloured strips with big faders and level meters. For each part you can now change the tone, even out the loudness and add room. "Song at a glance" shows every part along the song with a moving line.',
+    'Ready to upload: a check for YouTube, Spotify and distributors (loudness, peaks, length, cover picture) and one button that makes a folder-ready ZIP with the WAV, the MP3, the cover and a short note.',
+    'Pictures for drum beats and instruments, with a Hear button. A drummer you can set to play busier or calmer, extra percussion, drum kits and automatic fills. Chords, bass and melody can have a human feel.',
+    'You can load your own sound library (a .sf2 file) in Profile > Settings, and go back to the built-in sounds any time.',
+    'Pitch correction for a recorded voice: Off, Gentle, Medium or Full, towards the notes of the song. It keeps your vibrato and timing and leaves good notes exactly as you sang them.',
+    'Stage mode (the Stage button at the top): black and white, bigger and easy to read from far away.',
+    'Perform (the button next to Play the song): the song full screen with a huge chord now and next, the words, and a big Play and Stop.',
+    'Home shows Your path: the lessons you finished, the one you are on and the ones coming. A new Sun/Moon button at the top switches light and dark.'
+  ] },
+  { v: '2.10.1', title: 'Change any chord, and a much stronger phone remote', items: [
+    'Chords: replace the chosen chord, or add one before or after it. A replaced chord starts fresh and keeps its place and length.',
+    'Change the note of a chord (for example C to A) in the chord editor, and pick any chord from all 12 notes, even outside the key.',
+    'Drag a chord from the lists onto the chord strip (left edge: before, right edge: after, middle: replace), or drag chords in the strip to reorder them. It works with the mouse and the touch screen (hold a moment, then drag), and the page scrolls when you drag near the edge.',
+    'Phone remote: jump to any part, Next and Previous part, From the top, a bar of clicks before Play, change the key, volume, mute and solo for every part and recorded track, open another song, Undo, and a level meter while recording.',
+    'On the phone you can show chord names or numbers, chords or words or both, and make the text bigger. The phone only controls the song that is open: deleting and saving over recordings stay on the computer.'
+  ] },
   { v: '2.10.0', title: 'Fix, share and learn: a tidier Song Lab, a phone remote, and learning from recordings', items: [
     'The Song Lab is in tabs (Write, Arrange, Record, Mix, Share) with the player and Undo/Redo always at the top.',
     'Undo and Redo for everything in a song (buttons, or Ctrl+Z and Ctrl+Y). A recording you delete comes back with Undo until you leave the song.',

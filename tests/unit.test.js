@@ -613,9 +613,20 @@ test('phone remote server: needs the code, serves state, accepts only the three 
   assert.equal(st.meta.title, 'He Did It'); assert.equal(st.live.now, 'D');
   const post = (cmd, extra) => fetch(base + '/api/cmd' + k, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(Object.assign({ cmd }, extra)) });
   for (const c of ['play', 'record', 'stop']) assert.equal((await post(c)).status, 200);
-  assert.deepEqual(got, ['play', 'record', 'stop']);
+  assert.deepEqual(got, [{ cmd: 'play' }, { cmd: 'record' }, { cmd: 'stop' }]);
   assert.equal((await post('delete everything')).status, 400); assert.equal((await post('__proto__')).status, 400);
-  assert.deepEqual(got, ['play', 'record', 'stop'], 'unknown commands do nothing');
+  assert.deepEqual(got, [{ cmd: 'play' }, { cmd: 'record' }, { cmd: 'stop' }], 'unknown commands do nothing');
+  // commands with arguments: only the right shapes get through, and extra fields are dropped
+  const n0 = got.length;
+  assert.equal((await post('part', { i: 2, evil: 'x' })).status, 200); assert.deepEqual(got[n0], { cmd: 'part', i: 2 });
+  assert.equal((await post('key', { d: -1 })).status, 200); assert.equal((await post('key', { key: 'F#' })).status, 200);
+  assert.equal((await post('mix', { kind: 'part', k: 'drums', v: 80 })).status, 200);
+  assert.equal((await post('mute', { kind: 'track', k: 'guide' })).status, 200);
+  assert.equal((await post('song', { id: 'abc123' })).status, 200); assert.equal((await post('countin', { on: true })).status, 200);
+  const n1 = got.length;
+  for (const bad of [['part', { i: -1 }], ['part', { i: 1.5 }], ['part', { i: '2' }], ['part', { i: 999 }], ['key', { d: 5 }], ['key', { key: 'H' }], ['mix', { kind: 'part', k: 'drums', v: 999 }], ['mix', { kind: 'other', k: 'x', v: 5 }], ['mix', { kind: 'part', k: '../x', v: 5 }], ['song', { id: 'a b' }], ['song', {}], ['countin', { on: 'yes' }], ['delete', {}], ['constructor', {}]])
+    assert.equal((await post(bad[0], bad[1])).status, 400, JSON.stringify(bad));
+  assert.equal(got.length, n1, 'refused commands never reach the app');
   assert.equal((await fetch(base + '/api/cmd' + k, { method: 'POST', body: 'x'.repeat(5000) }).catch(() => ({ status: 0 }))).status === 200, false, 'a huge request is refused');
   assert.equal((await fetch(base + '/nothing' + k)).status, 404);
   for (let i = 0; i < 8; i++) await fetch(base + '/?k=bad' + i);
@@ -679,4 +690,82 @@ test('sanitize: saved progressions, human feel, drum fill kinds and the new endi
   const st = Sanitize.cleanState({ v: 1, progs: [{ fid: 'abc123', name: ' Sunday ', chords: [{ r: 0, q: 'maj9', b: null, beats: 4, push: false }, { r: 20, q: 'evil', b: 99, beats: 400, push: 1 }] }, { fid: '!!', name: 'bad', chords: [{ r: 0, q: 'major' }] }, { fid: 'abc123', name: 'dup', chords: [{ r: 1, q: 'minor' }] }, { fid: 'zzz999', name: 'empty', chords: [] }] }, ctx);
   assert.equal(st.progs.length, 1); const p = st.progs[0]; assert.equal(p.name, 'Sunday');
   assert.deepEqual(p.chords[1], { r: 11, q: 'major', b: 11, beats: 32, push: false }); assert.equal(p.chords[0].q, 'maj9');
+});
+
+test('release check: plain-words notes for a finished song and for a cover picture', () => {
+  const M = require('../app/js/mastering.js');
+  const good = { seconds: 200, rawPeakDb: -3, clipped: 0, headSec: 0.1, tailSec: 1, before: -18, lufs: -14.1, tp: -1.0, target: 'stream', sampleRate: 44100 };
+  const lv = n => n.map(x => x.level);
+  assert.ok(M.releaseNotes(good).every(x => x.level === 'ok'), 'a good song has only OK notes: ' + JSON.stringify(lv(M.releaseNotes(good))));
+  const t = (o, level, word) => { const n = M.releaseNotes(Object.assign({}, good, o)); assert.ok(n.some(x => x.level === level && (x.title + x.text).includes(word)), word + ' -> ' + JSON.stringify(n)); };
+  t({ seconds: 12 }, 'warn', 'Very short');
+  t({ target: 'off' }, 'warn', 'Mastering is off');
+  t({ lufs: -17 }, 'warn', 'target is -14');
+  t({ tp: -0.2 }, 'bad', 'ceiling');
+  t({ clipped: 40 }, 'warn', 'too loud before mastering');
+  t({ headSec: 4 }, 'warn', 'Silence at the start');
+  t({ tailSec: 9 }, 'warn', 'Silence at the end');
+  t({ before: -40 }, 'warn', 'very quiet');
+  t({ sampleRate: 48000 }, 'warn', '48000');
+  assert.equal(M.releaseNotes({ seconds: 0 })[0].level, 'bad', 'silence is an error');
+  const c = (w, h, ty, b) => M.coverNotes(w, h, ty, b || 1e6);
+  assert.ok(c(3000, 3000, 'image/jpeg').every(x => x.level === 'ok'));
+  assert.ok(c(3000, 3000, 'image/png').every(x => x.level === 'ok'));
+  assert.ok(c(3000, 2000, 'image/jpeg').some(x => x.level === 'bad' && /square/i.test(x.text)));
+  assert.ok(c(2000, 2000, 'image/jpeg').some(x => x.level === 'warn'));
+  assert.ok(c(800, 800, 'image/jpeg').some(x => x.level === 'bad'));
+  assert.ok(c(3000, 3000, 'image/gif').some(x => x.level === 'bad'));
+  assert.ok(c(3000, 3000, 'image/jpeg', 20 * 1048576).some(x => x.level === 'warn'));
+  assert.ok(c(0, 0, '').some(x => x.level === 'bad'));
+});
+
+test('drummer settings survive a backup and bad values are cleaned', () => {
+  const ctx = { styles: ['groove'], beats: ['none', 'praise'], keys: ['C'] };
+  const ok = Sanitize.cleanState({ songs: [{ id: 'pdr', autoFill: true, busy: 1, perc: 'shakercongas', kit: 40, humanKeys: 2 }] }, ctx).songs[0];
+  assert.deepEqual([ok.autoFill, ok.busy, ok.perc, ok.kit, ok.humanKeys], [true, 1, 'shakercongas', 40, 2]);
+  assert.equal(Sanitize.cleanState({ songs: [{ id: 'pdr4', humanKeys: 9 }] }, ctx).songs[0].humanKeys, 2);
+  const bad = Sanitize.cleanState({ songs: [{ id: 'pdr2', autoFill: 'yes', busy: 9, perc: '<b>', kit: 99 }] }, ctx).songs[0];
+  assert.deepEqual([bad.autoFill, bad.busy, bad.perc, bad.kit], [false, 1, 'off', 0]);
+  const low = Sanitize.cleanState({ songs: [{ id: 'pdr3', busy: -7 }] }, ctx).songs[0];
+  assert.equal(low.busy, -1);
+});
+
+test('mixer part sound (tone, even out, extra room) is kept in a backup and bad values are cleaned', () => {
+  const ctx = { styles: ['groove'], beats: ['none'], keys: ['C'] };
+  const a = Sanitize.cleanState({ songs: [{ id: 'pmx', mixer: { chords: { v: 1, tone: 0.5, comp: 0.4, room: 0.3 }, bass: { tone: -9, comp: 'x', room: 5 } } }] }, ctx).songs[0].mixer;
+  assert.deepEqual([a.chords.tone, a.chords.comp, a.chords.room], [0.5, 0.4, 0.3]);
+  assert.deepEqual([a.bass.tone, a.bass.comp, a.bass.room], [-1, 0, 1]);
+});
+
+/* ---- gentle pitch correction ---- */
+test('pitch correction: pulls a flat note to the key, keeps vibrato, leaves in-tune and bent notes alone', () => {
+  const PF = require(js('pitchfix.js')), sr = 48000;
+  const note = (midi, dur, cents, vib) => { const n = Math.round(dur * sr), y = new Float32Array(n); let ph = 0; for (let i = 0; i < n; i++) { const t = i / sr, m = midi + cents / 100 + (vib ? vib * Math.sin(2 * Math.PI * 5.5 * t) / 100 : 0); ph += 2 * Math.PI * 440 * Math.pow(2, (m - 69) / 12) / sr; let v = 0; for (let h = 1; h <= 6; h++) v += Math.sin(h * ph) / h; y[i] = 0.25 * v * Math.min(1, t / 0.03, (dur - t) / 0.05); } return y; };
+  const centre = (y, a, b) => { const v = PF.track(y.subarray(Math.round(a * sr), Math.round(b * sr)), sr).midi.filter(q => q === q); return v.reduce((s, q) => s + q, 0) / v.length; };
+  const pcs = PF.scalePcs('C', false);
+  assert.deepEqual(pcs, [0, 2, 4, 5, 7, 9, 11]);
+  assert.deepEqual(PF.scalePcs('A', true), pcs);                       // relative minor, same notes
+  const flat = note(57, 1.2, -15, 0), fixed = PF.tune(flat, sr, { amount: 1, pcs });
+  assert.equal(fixed.length, flat.length);                              // timing never changes
+  assert.ok(Math.abs((centre(fixed, 0.3, 1) - 57) * 100) < 3, 'within 3 cents of the note');
+  const half = PF.tune(note(57, 1.2, -20, 0), sr, { amount: 0.5, pcs });
+  assert.ok(Math.abs((centre(half, 0.3, 1) - 57) * 100 + 10) < 4, 'half the amount moves half the way');
+  const good = note(57, 1.2, 0, 0), same = PF.tune(good, sr, { amount: 1, pcs });
+  assert.ok(good.every((v, i) => v === same[i]), 'an in-tune note is returned exactly as sung');
+  const vib = note(60, 1.5, -30, 25), vf = PF.tune(vib, sr, { amount: 1, pcs });
+  const spread = y => { const v = PF.track(y.subarray(Math.round(0.3 * sr), Math.round(1.3 * sr)), sr).midi.filter(q => q === q); return Math.max(...v) - Math.min(...v); };
+  assert.ok(spread(vf) > spread(vib) * 0.8, 'vibrato is kept');
+  assert.ok(Math.abs(centre(vf, 0.3, 1.3) - 60) < 0.05);
+  const bent = note(60.6, 1.2, 0, 0), bf = PF.tune(bent, sr, { amount: 1, pcs });
+  assert.ok(bent.every((v, i) => v === bf[i]), 'a note more than half a semitone away (a blue note) is not touched');
+  assert.equal(PF.tune(flat, sr, { amount: 0, pcs })[5000], flat[5000]);   // off = untouched
+});
+
+test('pitch correction: song settings are cleaned', () => {
+  const ctx2 = { styles: ['groove'], beats: ['none'], keys: ['C'] };
+  const mk = fx => Sanitize.cleanState({ songs: [{ id: 'pq', guide: { dur: 3, takes: [{ k: 'pq', dur: 3 }], fx } }] }, ctx2).songs[0].guide.fx;
+  const a = mk({ preset: 'worship', nr: 'preset', tune: 'medium', tuneScale: 'any' });
+  assert.deepEqual([a.tune, a.tuneScale], ['medium', 'any']);
+  const b = mk({ preset: 'worship', tune: 'evil', tuneScale: 'x' });
+  assert.deepEqual([b.tune, b.tuneScale], ['off', 'key']);
 });

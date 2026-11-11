@@ -159,6 +159,7 @@ const VocalFX = (() => {
   /* the whole chain, without the reverb (pure) */
   function chain(x, sr, presetId, o) {
     o = o || {};
+    if (o.tune && o.tune.amount > 0 && typeof PitchFix !== 'undefined') x = PitchFix.tune(x, sr, o.tune);   // gentle pitch correction comes first, before the studio sound
     const p = PRESETS[presetId]; if (!p || presetId === 'off') return x.slice();
     const nr = o.nr !== undefined && o.nr !== null ? o.nr : p.nr;
     let y = highpass(x, sr, p.hpf);

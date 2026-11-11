@@ -77,6 +77,11 @@ function cleanSong(p, ctx, taken) {
     beat: pick(p.beat, ctx.beats ? ctx.beats.concat(['meter']) : null, 'none'),
     swing: num(p.swing, 0, 0, 100),
     human: Math.round(num(p.human, 0, 0, 2)),
+    humanKeys: Math.round(num(p.humanKeys, 0, 0, 2)),
+    autoFill: p.autoFill === true,
+    busy: Math.round(num(p.busy, 0, -1, 1)),
+    perc: ['off', 'shaker', 'tambourine', 'congas', 'shakercongas'].indexOf(p.perc) >= 0 ? p.perc : 'off',
+    kit: [0, 8, 16, 24, 32, 40].indexOf(p.kit) >= 0 ? p.kit : 0,
     beatWas: ctx.beats && ctx.beats.indexOf(p.beatWas) >= 0 && p.beatWas !== 'none' ? p.beatWas : undefined,
     grid,
     melody,
@@ -89,7 +94,9 @@ function cleanSong(p, ctx, taken) {
     created: num(p.created, Date.now(), 0),
     v: p.v === 2 || p.v === 3 ? p.v : undefined,
     ts: [3, 4, 6].indexOf(p.ts) >= 0 ? p.ts : 4,
-    bassStyle: pick(p.bassStyle, ['root', 'rootfifth', 'octaves', 'walking'], undefined),
+    bassStyle: pick(p.bassStyle, ['root', 'rootfifth', 'octaves', 'walking', 'gospel', 'pump', 'makossa', 'worship', 'reggae', 'highlife', 'funk', 'motown', 'tumbao', 'bikutsi'], undefined),
+    edits: cleanEdits(p.edits),
+    bassSound: pick(p.bassSound, ['finger', 'pick', 'upright', 'fretless', 'slap', 'synth', 'sub'], undefined),
     sections: cleanSections(p.sections),
     melodies: cleanMelodies(p.melodies),
     takes: cleanTakes(p.takes),
@@ -114,6 +121,21 @@ function cleanChords(list) {
   return (Array.isArray(list) ? list : []).filter(c => isObj(c) && pc12(c.r) !== null && CHORD_QS.indexOf(c.q) >= 0).slice(0, 32)
     .map(c => ({ r: c.r, q: c.q, b: pc12(c.b), beats: Math.round(num(c.beats, 4, 0.5, 16) * 2) / 2, push: c.push === true }));
 }
+/* parts drawn by hand: { bass: { Chorus: [{ t, d, m, v }] }, drums: { Chorus: [{ t, d, drum, v }] } } */
+function cleanEdits(e) {
+  if (!isObj(e)) return undefined;
+  const out = {}, DR = ['k', 's', 'h', 'o', 'cl', 'r', 'tm', 'c'];
+  ['bass', 'drums'].forEach(part => {
+    if (!isObj(e[part])) return;
+    Object.keys(e[part]).slice(0, 12).forEach(sec => {
+      if (!['Intro', 'Verse', 'Pre-chorus', 'Chorus', 'Bridge', 'Outro'].includes(sec) || !Array.isArray(e[part][sec])) return;
+      const list = e[part][sec].slice(0, 600).filter(n => isObj(n) && Number.isFinite(n.t) && n.t >= 0 && n.t < 128 && (part === 'bass' ? Number.isFinite(n.m) && n.m >= 24 && n.m <= 60 : DR.indexOf(n.drum) >= 0))
+        .map(n => part === 'bass' ? { t: Math.round(n.t * 4) / 4, d: num(n.d, 0.5, 0.25, 32), m: Math.round(n.m), v: num(n.v, 0.8, 0.05, 1) } : { t: Math.round(n.t * 4) / 4, d: 0.1, drum: n.drum, v: num(n.v, 0.8, 0.05, 1) });
+      (out[part] = out[part] || {})[sec] = list;
+    });
+  });
+  return Object.keys(out).length ? out : undefined;
+}
 function cleanSections(x) {
   if (!isObj(x)) return undefined;
   const out = {};
@@ -127,8 +149,14 @@ function cleanSections(x) {
 function cleanForm(list) {
   if (!Array.isArray(list)) return undefined;
   const int = (v, lo, hi, d) => Math.round(num(v, d, lo, hi));
-  return list.filter(i => isObj(i) && SECTIONS.indexOf(i.s) >= 0).slice(0, 30).map(i => ({ s: i.s, up: int(i.up, -6, 11, 0), x: int(i.x, 1, 8, 1), tag: int(i.tag, 0, 8, 0),
-    stop: i.stop === true, vamp: i.vamp === true, en: ['soft', 'full'].indexOf(i.en) >= 0 ? i.en : '', lead: i.lead !== false, fill: i.fill === true, fk: ['snare', 'toms', 'half', 'crash'].indexOf(i.fk) >= 0 ? i.fk : '', swell: i.swell === true }));
+  return list.filter(i => isObj(i) && SECTIONS.indexOf(i.s) >= 0).slice(0, 30).map(i => Object.assign({ s: i.s, up: int(i.up, -6, 11, 0), x: int(i.x, 1, 8, 1), tag: int(i.tag, 0, 8, 0),
+    stop: i.stop === true, vamp: i.vamp === true, en: ['soft', 'full'].indexOf(i.en) >= 0 ? i.en : '', lead: i.lead !== false, fill: i.fill === true, fk: ['snare', 'toms', 'half', 'crash'].indexOf(i.fk) >= 0 ? i.fk : '', swell: i.swell === true }, cleanLv(i.lv)));
+}
+/* volume changes through the song: { part: dB } for one part of the form (-60 = silent) */
+function cleanLv(lv) {
+  if (!isObj(lv)) return {};
+  const o = {}; Object.keys(lv).slice(0, 20).forEach(k => { if (/^(chords|bass|drums|melody|choir|loops|tk[A-Za-z0-9_-]{0,20})$/.test(k) && Number.isFinite(lv[k]) && Math.round(lv[k]) !== 0) o[k] = Math.max(-60, Math.min(9, Math.round(lv[k]))); });
+  return Object.keys(o).length ? { lv: o } : {};
 }
 const FX_PRESETS = ['off', 'natural', 'worship', 'ballad', 'choir', 'speech'], NR_SET = ['preset', 'off', 'light', 'medium', 'strong'];
 function cleanGuide(g, id) {
@@ -137,7 +165,7 @@ function cleanGuide(g, id) {
   if (Array.isArray(g.takes)) out.takes = g.takes.filter(t => isObj(t) && typeof t.k === 'string' && keyRe.test(t.k)).slice(0, 6).map(t => ({ k: t.k, at: num(t.at, 0, 0), dur: num(t.dur, 0, 0, 3600), n: Math.round(num(t.n, 1, 1, 9999)) }));
   if (out.takes) out.main = Math.round(num(g.main, out.takes.length - 1, 0, Math.max(0, out.takes.length - 1)));
   if (isObj(g.comp)) { out.comp = {}; Object.keys(g.comp).slice(0, 200).forEach(k => { if (/^[0-9]{1,3}$/.test(k) && Number.isInteger(g.comp[k]) && g.comp[k] >= 0 && g.comp[k] < 6) out.comp[k] = g.comp[k]; }); }
-  if (isObj(g.fx) && FX_PRESETS.indexOf(g.fx.preset) >= 0) out.fx = { preset: g.fx.preset, nr: NR_SET.indexOf(g.fx.nr) >= 0 ? g.fx.nr : 'preset', reverb: g.fx.reverb !== false };
+  if (isObj(g.fx) && FX_PRESETS.indexOf(g.fx.preset) >= 0) out.fx = { preset: g.fx.preset, nr: NR_SET.indexOf(g.fx.nr) >= 0 ? g.fx.nr : 'preset', reverb: g.fx.reverb !== false, tune: ['gentle', 'medium', 'full'].indexOf(g.fx.tune) >= 0 ? g.fx.tune : 'off', tuneScale: g.fx.tuneScale === 'any' ? 'any' : 'key' };
   const range = r => isObj(r) && Number.isFinite(r.a) && Number.isFinite(r.b) && r.a >= 0 && r.b > r.a && r.b <= 7200;
   if (Array.isArray(g.mutes)) out.mutes = g.mutes.filter(range).slice(0, 60).map(r => ({ a: r.a, b: r.b }));
   if (Array.isArray(g.patches)) out.patches = g.patches.filter(r => range(r) && typeof r.k === 'string' && keyRe.test(r.k) && Number.isFinite(r.t0)).slice(0, 24).map(r => ({ k: r.k, n: Math.round(num(r.n, 1, 1, 9999)), a: r.a, b: r.b, t0: Math.max(0, r.t0), fade: num(r.fade, 0.02, 0.001, 0.1) }));
@@ -154,7 +182,7 @@ function cleanTracks(list, id) {
 }
 function cleanMixer(m) {
   if (!isObj(m)) return undefined;
-  const out = {}; ['chords', 'bass', 'drums', 'melody', 'choir', 'loops'].forEach(k => { const c = m[k]; if (isObj(c)) out[k] = { v: num(c.v, 1, 0, 1.5), pan: num(c.pan, 0, -1, 1), mute: c.mute === true, solo: c.solo === true }; });
+  const out = {}; ['chords', 'bass', 'drums', 'melody', 'choir', 'loops'].forEach(k => { const c = m[k]; if (isObj(c)) out[k] = { v: num(c.v, 1, 0, 1.5), pan: num(c.pan, 0, -1, 1), tone: num(c.tone, 0, -1, 1), comp: num(c.comp, 0, 0, 1), room: num(c.room, 0, 0, 1), mute: c.mute === true, solo: c.solo === true, lc: num(c.lc, 0, 0, 500), el: num(c.el, 0, -12, 12), em: num(c.em, 0, -12, 12), ef: num(c.ef, 1000, 150, 6000), eh: num(c.eh, 0, -12, 12), duck: num(c.duck, 0, 0, 0.9) }; });
   return out;
 }
 const INFO_KEYS = ['writers', 'artist', 'publisher', 'year', 'ccli', 'theme', 'notes'];
@@ -217,7 +245,7 @@ function cleanState(raw, ctx) {
   }
   if (out.prefs) {
     const p = out.prefs;
-    ['names', 'sound', 'midi'].forEach(b => { if (p[b] !== undefined && typeof p[b] !== 'boolean') delete p[b]; });
+    ['names', 'sound', 'midi', 'stage'].forEach(b => { if (p[b] !== undefined && typeof p[b] !== 'boolean') delete p[b]; });
     if (p.speed !== undefined && p.speed !== 'slow' && p.speed !== 'normal') delete p.speed;
     if (p.dailyMin !== undefined && DAILY.indexOf(p.dailyMin) < 0) delete p.dailyMin;
     if (p.instrument !== undefined && ctx.instruments && ctx.instruments.indexOf(p.instrument) < 0) delete p.instrument;

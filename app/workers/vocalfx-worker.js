@@ -1,6 +1,6 @@
 'use strict';
 /* runs the vocal chain and the mastering away from the screen, so the app stays responsive while long audio is processed */
-importScripts('../js/vocalfx.js', '../js/mastering.js');
+importScripts('../js/vocalfx.js', '../js/mastering.js', '../js/pitch.js', '../js/looptools.js', '../js/pitchfix.js');
 self.onmessage = e => {
   const { id, op } = e.data;
   try {
