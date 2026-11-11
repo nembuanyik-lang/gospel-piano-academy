@@ -1,7 +1,7 @@
 {
   "name": "gospel-piano-academy",
   "productName": "Gospel Music Academy",
-  "version": "2.10.0",
+  "version": "2.9.0",
   "description": "Gospel Music Academy - learn gospel piano and guitar, desktop edition",
   "main": "main.js",
   "author": "Gospel Music Academy",
@@ -17,7 +17,7 @@
     "check": "node scripts/check.js",
     "test": "node --test tests/unit.test.js tests/main.test.js",
     "stress": "node --test tests/e2e/stress.test.js",
-    "e2e": "node --test tests/e2e/app.test.js tests/e2e/mic.test.js tests/e2e/voice.test.js tests/e2e/sound.test.js tests/e2e/songlab.test.js tests/e2e/studio.test.js tests/e2e/loops.test.js tests/e2e/finish.test.js tests/e2e/fixing.test.js tests/e2e/remote.test.js tests/e2e/learn.test.js tests/e2e/tails.test.js tests/e2e/gospel.test.js tests/e2e/desktop.test.js tests/e2e/upgrade.test.js",
+    "e2e": "node --test tests/e2e/app.test.js tests/e2e/mic.test.js tests/e2e/voice.test.js tests/e2e/sound.test.js tests/e2e/songlab.test.js tests/e2e/studio.test.js tests/e2e/loops.test.js tests/e2e/finish.test.js tests/e2e/gospel.test.js tests/e2e/desktop.test.js tests/e2e/upgrade.test.js",
     "dist": "npm run check && node scripts/prepare.js --strict && electron-builder",
     "dist:win": "npm run check && node scripts/prepare.js --strict && electron-builder --win",
     "dist:mac": "npm run check && node scripts/prepare.js --strict && electron-builder --mac",
@@ -44,7 +44,6 @@
     "files": [
       "main.js",
       "preload.js",
-      "lanremote.js",
       "app/**/*",
       "build/icon.png",
       "package.json"
