@@ -1,21 +1,88 @@
-name: Build and publish Windows installer
+name: Test, build and release
+
+# Every push runs the checks and tests.
+# To publish an update: raise the version, then either run this workflow by hand
+# (Actions > Test, build and release > Run workflow) or push a version tag such as v2.2.1.
+# The installers are published as a GitHub Release, which installed copies pick up as an automatic update.
 on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
   workflow_dispatch:
+
 permissions:
   contents: write
+
 jobs:
-  windows:
-    runs-on: windows-latest
+  test:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
-      - run: npm run prepare-fonts
+      - name: Install (uses package-lock.json when it is there)
+        run: if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
+      - run: node scripts/check.js
+      - name: Unit tests
+        run: npm test
+      - name: Browser tests (information only; they do not block a release)
+        continue-on-error: true
+        run: |
+          npx playwright install --with-deps chromium
+          npm run e2e
+      - name: Dependency audit (information only)
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
+
+  build:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: --win
+          - os: macos-latest
+            target: --mac
+          - os: ubuntu-latest
+            target: --linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Tag matches package.json version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          v=$(node -p "require('./package.json').version")
+          if [ "v$v" != "${GITHUB_REF_NAME}" ]; then echo "Tag ${GITHUB_REF_NAME} does not match package.json version $v"; exit 1; fi
+      - name: Install
+        shell: bash
+        run: if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
+      - name: Keep the exact versions used for this build
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-lock
+          path: package-lock.json
+      - name: Recorded piano samples (optional; the app falls back to its built-in piano)
+        run: npm run get-samples
+        continue-on-error: true
+      - run: node scripts/prepare.js --strict
       - name: Build and publish
         shell: bash
-        run: npx electron-builder --win --publish always -c.publish.provider=github -c.publish.owner=${{ github.repository_owner }} -c.publish.repo=${{ github.event.repository.name }} -c.publish.releaseType=release
+        run: npx electron-builder ${{ matrix.target }} --publish always -c.publish.provider=github -c.publish.owner=${{ github.repository_owner }} -c.publish.repo=${{ github.event.repository.name }} -c.publish.releaseType=release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: false
+          # Code signing (see RELEASING.md). When these secrets are not set the installers are built unsigned.
+          CSC_LINK: ${{ matrix.os == 'windows-latest' && secrets.WIN_CSC_LINK || secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ matrix.os == 'windows-latest' && secrets.WIN_CSC_KEY_PASSWORD || secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CSC_LINK != '' }}
