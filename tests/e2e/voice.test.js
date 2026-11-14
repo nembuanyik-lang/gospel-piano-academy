@@ -82,7 +82,7 @@ test('Vocal Studio: every exercise starts, fits the singer\'s range, and finishe
     for (const def of VEX) {
       const host = document.createElement('div'); document.body.appendChild(host);
       let done = null;
-      const run = runVoiceEx(host, def, { rounds: 2, count: 2, onDone: s => { done = s; } });
+      const run = runVoiceEx(host, def, { rounds: 2, count: 2, song: 'sb-morning', onDone: s => { done = s; } });
       out[def.id + 'Intro'] = /How this exercise works/.test(host.textContent); host.querySelector('.vx-intro button').click();
       await wait(1200);
       const notes = [...host.querySelectorAll('.vx-t b')].map(b => b.textContent);
@@ -101,4 +101,4 @@ test('Vocal Studio: every exercise starts, fits the singer\'s range, and finishe
   r.harmonyFit.forEach(h => { assert.ok(h.lo >= 48 && h.hi <= 66, 'harmony fits: ' + JSON.stringify(h)); });
   assert.deepEqual(errors, []);
 });
-const VEXIDS = ['match', 'five', 'arp', 'scale', 'minor', 'interval', 'sustain', 'echo', 'runs', 'harmony'];
+const VEXIDS = ['match', 'five', 'arp', 'scale', 'minor', 'interval', 'sustain', 'echo', 'runs', 'harmony', 'cresc', 'steady', 'phrase', 'harm3m', 'harm3l', 'song'];

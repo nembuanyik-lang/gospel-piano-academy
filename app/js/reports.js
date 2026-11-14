@@ -21,7 +21,7 @@ function learnerFacts(st) {
     ear: Object.keys(st.ear || {}).filter(k => E.EAR_TYPES[k] && st.ear[k].total).map(k => ({ label: E.EAR_TYPES[k].label, pct: pct(st.ear[k].correct, st.ear[k].total), total: st.ear[k].total })),
     perf: Object.keys(st.perf || {}).map(k => Object.assign({ id: k }, st.perf[k])).filter(r => r.best).sort((a, b) => (b.last || 0) - (a.last || 0)),
     perfMastered: Object.keys(st.perf || {}).filter(k => st.perf[k].passedAll).length,
-    signoffs: Object.keys(st.signoffs || {}).map(k => Object.assign({ id: k, title: (C.byId[k] || {}).title || k }, st.signoffs[k])),
+    signoffs: Object.keys(st.signoffs || {}).map(k => Object.assign({ id: k, title: (C.byId[k] || {}).title || (/^vx-L[1-6]$/.test(k) ? 'Vocal checkpoint, level ' + k.slice(4) : k) }, st.signoffs[k])),
     updated: st.updated || 0
   };
 }

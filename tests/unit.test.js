@@ -769,3 +769,64 @@ test('pitch correction: song settings are cleaned', () => {
   const b = mk({ preset: 'worship', tune: 'evil', tuneScale: 'x' });
   assert.deepEqual([b.tune, b.tuneScale], ['off', 'key']);
 });
+
+/* ---- vocal marking (no sound needed: made-up singing) ---- */
+const VG = require(js('vocalgrade.js'));
+const sing = (notes, f) => { const fr = []; notes.forEach(n => { for (let t = n.s; t < n.e; t += 0.025) fr.push({ t: t + (f && f.late || 0), m: n.m + (f && f.off || 0) / 100 }); }); return fr; };
+
+test('vocal: notes sung in tune and on time score high; late and flat score lower', () => {
+  const notes = [{ m: 60, s: 0, e: 1 }, { m: 62, s: 1, e: 2 }, { m: 64, s: 2, e: 4 }];
+  const good = VG.gradeNotes(notes, sing(notes));
+  assert.ok(good.every(r => r.score >= 95), JSON.stringify(good));
+  const late = VG.gradeNotes(notes, sing(notes, { late: 0.5 }));
+  assert.ok(late.every(r => r.score < 85) && late[0].onset > 0.4, 'late: ' + JSON.stringify(late));
+  const flat = VG.gradeNotes(notes, sing(notes, { off: -45 }));
+  assert.ok(flat.every(r => r.score < 70 && Math.abs(r.cents + 45) < 8), 'flat: ' + JSON.stringify(flat));
+  const silent = VG.gradeNotes(notes, []);
+  assert.ok(silent.every(r => r.score === 0 && r.cents === null));
+});
+test('vocal: a man singing a woman\'s line an octave lower still scores', () => {
+  const notes = [{ m: 72, s: 0, e: 1 }];
+  assert.ok(VG.gradeNotes(notes, sing([{ m: 60, s: 0, e: 1 }]))[0].score >= 95);
+});
+test('vocal: a repeated joined note is not marked for timing', () => {
+  const notes = [{ m: 60, s: 0, e: 1 }, { m: 60, s: 1, e: 2 }];
+  const r = VG.gradeNotes(notes, sing([{ m: 60, s: 0, e: 2 }]));
+  assert.equal(r[1].timing, null); assert.ok(r[1].score >= 95);
+});
+test('vocal: loudness marks follow the swell, the fade and the even note', () => {
+  const mk = f => Array.from({ length: 60 }, (_, i) => ({ t: i * 0.1, level: f(i / 59) }));
+  const up = mk(x => 0.02 * Math.pow(4, x)), down = mk(x => 0.08 * Math.pow(0.25, x)), flat = mk(() => 0.05);
+  assert.ok(VG.gradeDyn(up, 'cresc').score >= 85, 'swell ' + VG.gradeDyn(up, 'cresc').score);
+  assert.ok(VG.gradeDyn(down, 'dim').score >= 85);
+  assert.ok(VG.gradeDyn(flat, 'steady').score >= 95);
+  assert.ok(VG.gradeDyn(flat, 'cresc').score <= 20, 'a flat note is not a swell');
+  assert.ok(VG.gradeDyn(down, 'cresc').score <= 20, 'a fade is not a swell');
+  assert.ok(VG.gradeDyn(up, 'steady').score < 60, 'a swell is not even');
+  assert.equal(VG.gradeDyn([], 'cresc').score, 0);
+});
+test('vocal: levels open in order, the starting test can place the singer ahead, and a level needs its recording', () => {
+  const none = VG.levelStates({ best: {} });
+  assert.deepEqual(none.map(x => x.state), ['open', 'locked', 'locked', 'locked', 'locked', 'locked']);
+  const v = { range: { lo: 48, hi: 64 }, sustain: 5, best: { match: 70 } };
+  assert.equal(VG.levelStates(v)[0].state, 'check', 'passed but not recorded');
+  v.check = { L1: { at: '2026-11-08' } };
+  assert.deepEqual(VG.levelStates(v).slice(0, 2).map(x => x.state), ['done', 'open']);
+  const placed = VG.levelStates({ start: 3, best: {} });
+  assert.deepEqual(placed.map(x => x.state), ['open', 'open', 'open', 'locked', 'locked', 'locked']);
+  assert.equal(VG.placeStart([90, 92]), 3); assert.equal(VG.placeStart([78, 80]), 2); assert.equal(VG.placeStart([40, 50]), 1);
+});
+test('vocal: a Songbook piece is put in the key that fits the voice', () => {
+  const SB = require('fs').readFileSync(js('views-song.js'), 'utf8');
+  const song = { mel: [[1, 1], [3, 1], [5, 1], [8, 1], [5, 1], [3, 1], [1, 2]], key: 'C' };
+  const low = VG.songKey(song, { lo: 43, hi: 60 }), high = VG.songKey(song, { lo: 57, hi: 76 });
+  assert.ok(low.fits && high.fits && low.hi <= 60 && high.lo >= 57, JSON.stringify([low, high]));
+  const notes = VG.songNotes(song, 'D', 0);
+  assert.equal(notes[0].m, 62); assert.equal(notes[3].m, 74); assert.equal(notes[6].beat, 6);
+  assert.ok(SB.includes('SONGBOOK'));
+});
+test('vocal: the state cleaner keeps levels, checkpoints and song marks and drops nonsense', () => {
+  const out = Sanitize.cleanState({ voice: { range: { lo: 48, hi: 64 }, start: 9, check: { L2: { at: '2026-11-08' }, X: {} }, songs: { 'sb-morning': 88, '<b>': 5 }, best: { cresc: 70, bogus: 1 } } }, ctx);
+  assert.equal(out.voice.start, 6); assert.deepEqual(Object.keys(out.voice.check), ['L2']);
+  assert.deepEqual(out.voice.songs, { 'sb-morning': 88 }); assert.deepEqual(out.voice.best, { cresc: 70 });
+});

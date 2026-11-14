@@ -852,3 +852,50 @@ html.performing { zoom: 1 !important; }
 
 .fxmore .fxhead { margin: .6rem 0 0; font-weight: 700; color: var(--muted); }
 .fxmore select { min-height: 36px; }
+
+/* ---------- instrument look: a studio piano and a hardware-style tuner ---------- */
+.kb { background: linear-gradient(180deg, #241719 0%, #120b0c 100%); padding: 10px 5px 4px; border-radius: 10px; box-shadow: inset 0 2px 5px rgba(0, 0, 0, .65), 0 1px 0 rgba(255, 255, 255, .06); }
+.kb::before { content: ''; position: absolute; left: 5px; right: 5px; top: 4px; height: 4px; border-radius: 2px; background: linear-gradient(180deg, #A82243, #5E0F25); box-shadow: 0 1px 1px rgba(0, 0, 0, .5); pointer-events: none; }   /* the red felt strip */
+.wk { background: linear-gradient(180deg, color-mix(in srgb, var(--key-white) 84%, #000) 0%, var(--key-white) 9%, var(--key-white) 78%, color-mix(in srgb, var(--key-white) 88%, #000) 100%);
+  border: 1px solid color-mix(in srgb, var(--key-white-edge) 80%, #000); border-top: 0; border-radius: 0 0 7px 7px; margin: 0 1px;
+  box-shadow: inset 0 -6px 5px -4px rgba(0, 0, 0, .2), inset 1px 0 0 rgba(255, 255, 255, .5), 0 4px 0 color-mix(in srgb, var(--key-white-edge) 90%, #000), 0 6px 6px rgba(0, 0, 0, .5);
+  transition: transform .05s ease-out, box-shadow .05s ease-out, background .06s; }
+.bk { top: 10px; background: linear-gradient(180deg, #3D3E46 0%, #1A1B20 10%, #0B0C0F 86%, #2A2B31 100%); border: 1px solid #000; border-top: 0; border-radius: 0 0 5px 5px;
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, .13), inset -1px 0 0 rgba(0, 0, 0, .7), 0 5px 4px rgba(0, 0, 0, .6), 0 3px 0 #050506;
+  transition: transform .05s ease-out, box-shadow .05s ease-out, background .06s; }
+.wk.on, .wk.ok, .wk.bad { transform: translateY(3px); box-shadow: inset 0 -3px 4px -3px rgba(0, 0, 0, .25), 0 1px 0 color-mix(in srgb, var(--key-white-edge) 90%, #000), 0 2px 3px rgba(0, 0, 0, .45); }
+.bk.on, .bk.ok, .bk.bad { transform: translateY(2px); box-shadow: inset 1px 0 0 rgba(255, 255, 255, .1), inset -1px 0 0 rgba(0, 0, 0, .7), 0 2px 2px rgba(0, 0, 0, .6), 0 1px 0 #050506; }
+.wk.hint { background: linear-gradient(180deg, color-mix(in srgb, var(--key-hint) 80%, #000) 0%, var(--key-hint) 12%, var(--key-hint) 100%); }
+.wk.on { background: linear-gradient(180deg, #F7CE72, var(--key-on) 55%, #C98F2C); }
+.bk.on { background: linear-gradient(180deg, #F2C25E, var(--key-on) 40%, #B9811F); }
+.wk.ok { background: linear-gradient(180deg, #B8EBCC, #8FDDB2 60%, #6DC596); } .bk.ok { background: linear-gradient(180deg, #46C084, #2FA66B 50%, #1F8454); }
+.wk.bad { background: linear-gradient(180deg, #F8CDBD, #F3B4A0 60%, #E49580); } .bk.bad { background: linear-gradient(180deg, #D9663F, #C4502C 50%, #9F3B1C); }
+.bk.hint { background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 85%, #fff), var(--accent) 45%, color-mix(in srgb, var(--accent) 80%, #000)); }
+@media (prefers-reduced-motion: reduce) { .wk, .bk { transition: none; } }
+
+/* Voice: the tuner reads like a hardware tuner. A dark glass panel, a lit note, a gauge with tick marks and a needle. */
+.vx-head { background: linear-gradient(180deg, #1B1C21, #0E0F12); color: #EDEBE4; border-radius: 12px; padding: .8rem 1rem; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), inset 0 -2px 6px rgba(0, 0, 0, .5); }
+.vx-head .vx-instr { color: #B9B7AF; margin: 0; }
+.vx-read b { color: #F7D58A; text-shadow: 0 0 12px rgba(247, 213, 138, .35); font-size: 3rem; letter-spacing: .02em; }
+.vx-read span { color: #B9B7AF; }
+.vx-needle { height: 34px; border-radius: 10px; background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, .5) 0 1px, transparent 1px 5%) 0 100% / 100% 9px no-repeat,
+    linear-gradient(180deg, #0E0F12, #1A1B20); box-shadow: inset 0 2px 5px rgba(0, 0, 0, .7), 0 1px 0 rgba(255, 255, 255, .06); overflow: hidden; }
+.vx-needle .vx-zone { left: 25%; width: 50%; background: rgba(47, 166, 107, .28); }
+.vx-needle .vx-zone::after { width: 2px; background: #47D38F; box-shadow: 0 0 6px #47D38F; }
+.vx-needle i { top: 3px; width: 4px; height: 28px; margin-left: -2px; border-radius: 2px; background: #BDBBB3; box-shadow: 0 0 8px currentColor; color: #BDBBB3; }
+.vx-needle i.ok { background: #47D38F; color: #47D38F; } .vx-needle i.near { background: #F2B544; color: #F2B544; } .vx-needle i.far { background: #F0587E; color: #F0587E; }
+.vx-trace { background: linear-gradient(180deg, #14151A, #0B0C0F); border-color: #2A2B31; }
+
+/* timeline pieces: what the pointer looks like for each tool */
+.timeline[data-tool="move"] .tl-wave { cursor: grab; }
+.timeline[data-tool="cut"] .tl-wave { cursor: col-resize; }
+.tl-clips { margin: .4rem 0 .6rem; }
+.tl-clips .btn[disabled] { opacity: .45; cursor: default; }
+.tl-row.drop { outline: 2px dashed var(--gold, #c9a227); outline-offset: -2px; }
+.tl-to { max-width: 22rem; }
+
+.vx-reqs { list-style: none; margin: .5rem 0 1rem; padding: 0; display: grid; gap: .4rem; }
+.vx-reqs li { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; padding: .4rem .6rem; border: 1px solid var(--line); border-radius: 8px; }
+.vx-reqs li.ok { border-color: var(--ok); }
+.vx-level.locked { opacity: .6; }

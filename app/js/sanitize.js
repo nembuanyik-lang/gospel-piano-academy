@@ -17,7 +17,7 @@ const MAX_DEPTH = 8, MAX_ARRAY = 5000, DEFAULT_TEXT = 1000;
 const SECTIONS = ['Intro', 'Verse', 'Pre-chorus', 'Chorus', 'Bridge', 'Outro'];
 const DAILY = [5, 10, 15, 20, 30];
 const TOP_KEYS = ['v', 'updated', 'profile', 'lessons', 'cats', 'xp', 'practice', 'ear', 'ach', 'songs', 'prefs', 'testouts',
-  'scores', 'today', 'sprint', 'recommend', 'events', 'review', 'songbook', 'sight', 'guitar', 'perf', 'signoffs', 'byear', 'routines', 'voice', 'gear', 'licks', 'learn', 'progs'];
+  'scores', 'today', 'sprint', 'recommend', 'events', 'review', 'songbook', 'sight', 'guitar', 'perf', 'signoffs', 'byear', 'routines', 'voice', 'gear', 'licks', 'learn', 'progs', 'myBeats'];
 
 const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
 const num = (v, d, lo, hi) => { const n = typeof v === 'number' ? v : NaN; if (!Number.isFinite(n)) return d; return Math.min(hi === undefined ? n : hi, Math.max(lo === undefined ? n : lo, n)); };
@@ -96,6 +96,7 @@ function cleanSong(p, ctx, taken) {
     ts: [3, 4, 6].indexOf(p.ts) >= 0 ? p.ts : 4,
     bassStyle: pick(p.bassStyle, ['root', 'rootfifth', 'octaves', 'walking', 'gospel', 'pump', 'makossa', 'worship', 'reggae', 'highlife', 'funk', 'motown', 'tumbao', 'bikutsi'], undefined),
     edits: cleanEdits(p.edits),
+    extras: isObj(p.extras) ? ['rguitar', 'horns', 'strpad'].reduce((o, k) => { if (p.extras[k] === true) o[k] = true; return o; }, {}) : undefined,
     bassSound: pick(p.bassSound, ['finger', 'pick', 'upright', 'fretless', 'slap', 'synth', 'sub'], undefined),
     sections: cleanSections(p.sections),
     melodies: cleanMelodies(p.melodies),
@@ -155,7 +156,7 @@ function cleanForm(list) {
 /* volume changes through the song: { part: dB } for one part of the form (-60 = silent) */
 function cleanLv(lv) {
   if (!isObj(lv)) return {};
-  const o = {}; Object.keys(lv).slice(0, 20).forEach(k => { if (/^(chords|bass|drums|melody|choir|loops|tk[A-Za-z0-9_-]{0,20})$/.test(k) && Number.isFinite(lv[k]) && Math.round(lv[k]) !== 0) o[k] = Math.max(-60, Math.min(9, Math.round(lv[k]))); });
+  const o = {}; Object.keys(lv).slice(0, 20).forEach(k => { if (/^(chords|bass|drums|melody|choir|rguitar|horns|strpad|loops|tk[A-Za-z0-9_-]{0,20})$/.test(k) && Number.isFinite(lv[k]) && Math.round(lv[k]) !== 0) o[k] = Math.max(-60, Math.min(9, Math.round(lv[k]))); });
   return Object.keys(o).length ? { lv: o } : {};
 }
 const FX_PRESETS = ['off', 'natural', 'worship', 'ballad', 'choir', 'speech'], NR_SET = ['preset', 'off', 'light', 'medium', 'strong'];
@@ -167,6 +168,7 @@ function cleanGuide(g, id) {
   if (isObj(g.comp)) { out.comp = {}; Object.keys(g.comp).slice(0, 200).forEach(k => { if (/^[0-9]{1,3}$/.test(k) && Number.isInteger(g.comp[k]) && g.comp[k] >= 0 && g.comp[k] < 6) out.comp[k] = g.comp[k]; }); }
   if (isObj(g.fx) && FX_PRESETS.indexOf(g.fx.preset) >= 0) out.fx = { preset: g.fx.preset, nr: NR_SET.indexOf(g.fx.nr) >= 0 ? g.fx.nr : 'preset', reverb: g.fx.reverb !== false, tune: ['gentle', 'medium', 'full'].indexOf(g.fx.tune) >= 0 ? g.fx.tune : 'off', tuneScale: g.fx.tuneScale === 'any' ? 'any' : 'key' };
   const range = r => isObj(r) && Number.isFinite(r.a) && Number.isFinite(r.b) && r.a >= 0 && r.b > r.a && r.b <= 7200;
+  if (Array.isArray(g.clips)) { const cl = g.clips.filter(c => isObj(c) && Number.isFinite(c.from) && c.from >= 0 && c.from <= 7200 && (c.to === null || (Number.isFinite(c.to) && c.to > c.from && c.to <= 7200)) && Number.isFinite(c.at) && c.at >= 0 && c.at <= 7200).slice(0, 60).map(c => { const o = { from: c.from, to: c.to === null ? null : c.to, at: c.at }; if (typeof c.src === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(c.src)) o.src = c.src; ['fi', 'fo'].forEach(k => { if (Number.isFinite(c[k]) && c[k] >= 0) o[k] = Math.min(5, c[k]); }); return o; }); if (cl.length) out.clips = cl; }
   if (Array.isArray(g.mutes)) out.mutes = g.mutes.filter(range).slice(0, 60).map(r => ({ a: r.a, b: r.b }));
   if (Array.isArray(g.patches)) out.patches = g.patches.filter(r => range(r) && typeof r.k === 'string' && keyRe.test(r.k) && Number.isFinite(r.t0)).slice(0, 24).map(r => ({ k: r.k, n: Math.round(num(r.n, 1, 1, 9999)), a: r.a, b: r.b, t0: Math.max(0, r.t0), fade: num(r.fade, 0.02, 0.001, 0.1) }));
   out.pan = num(g.pan, 0, -1, 1); out.mute = g.mute === true; out.solo = g.solo === true;
@@ -182,7 +184,7 @@ function cleanTracks(list, id) {
 }
 function cleanMixer(m) {
   if (!isObj(m)) return undefined;
-  const out = {}; ['chords', 'bass', 'drums', 'melody', 'choir', 'loops'].forEach(k => { const c = m[k]; if (isObj(c)) out[k] = { v: num(c.v, 1, 0, 1.5), pan: num(c.pan, 0, -1, 1), tone: num(c.tone, 0, -1, 1), comp: num(c.comp, 0, 0, 1), room: num(c.room, 0, 0, 1), mute: c.mute === true, solo: c.solo === true, lc: num(c.lc, 0, 0, 500), el: num(c.el, 0, -12, 12), em: num(c.em, 0, -12, 12), ef: num(c.ef, 1000, 150, 6000), eh: num(c.eh, 0, -12, 12), duck: num(c.duck, 0, 0, 0.9) }; });
+  const out = {}; ['chords', 'bass', 'drums', 'melody', 'choir', 'rguitar', 'horns', 'strpad', 'loops'].forEach(k => { const c = m[k]; if (isObj(c)) out[k] = { v: num(c.v, 1, 0, 1.5), pan: num(c.pan, 0, -1, 1), tone: num(c.tone, 0, -1, 1), comp: num(c.comp, 0, 0, 1), room: num(c.room, 0, 0, 1), mute: c.mute === true, solo: c.solo === true, lc: num(c.lc, 0, 0, 500), el: num(c.el, 0, -12, 12), em: num(c.em, 0, -12, 12), ef: num(c.ef, 1000, 150, 6000), eh: num(c.eh, 0, -12, 12), duck: num(c.duck, 0, 0, 0.9) }; });
   return out;
 }
 const INFO_KEYS = ['writers', 'artist', 'publisher', 'year', 'ccli', 'theme', 'notes'];
@@ -229,7 +231,11 @@ function cleanState(raw, ctx) {
 
   const objKeys = ['profile', 'lessons', 'cats', 'practice', 'ear', 'ach', 'prefs', 'testouts', 'today', 'sprint', 'recommend', 'events', 'review', 'songbook', 'sight', 'guitar', 'perf', 'signoffs', 'byear', 'routines', 'voice', 'gear', 'licks'];
   objKeys.forEach(k => { if (out[k] !== undefined && !isObj(out[k])) delete out[k]; });
-  ['songs', 'scores', 'learn', 'progs'].forEach(k => { if (out[k] !== undefined && !Array.isArray(out[k])) delete out[k]; });
+  ['songs', 'scores', 'learn', 'progs', 'myBeats'].forEach(k => { if (out[k] !== undefined && !Array.isArray(out[k])) delete out[k]; });
+  if (out.myBeats) {   // saved drum beats
+    const DR = ['k', 's', 'h', 'o', 'cl', 'r', 'tm', 'c'];
+    out.myBeats = out.myBeats.slice(0, 30).filter(b => isObj(b) && typeof b.id === 'string' && /^[A-Za-z0-9_-]{1,24}$/.test(b.id) && typeof b.name === 'string' && b.name.trim() && Array.isArray(b.notes)).map(b => ({ id: b.id, name: b.name.slice(0, 40), beats: Math.round(num(b.beats, 4, 1, 128)), notes: b.notes.slice(0, 600).filter(n => isObj(n) && DR.indexOf(n.drum) >= 0 && Number.isFinite(n.t) && n.t >= 0 && n.t < 128).map(n => ({ t: Math.round(n.t * 4) / 4, drum: n.drum, v: num(n.v, 0.8, 0.05, 1) })) }));
+  }
 
   if (out.v !== undefined) out.v = num(out.v, 1, 0);
   if (out.updated !== undefined) out.updated = num(out.updated, 0, 0);
@@ -281,12 +287,15 @@ function cleanState(raw, ctx) {
     if (isObj(v.range)) c.range = { lo: midi(v.range.lo), hi: midi(v.range.hi), at: typeof v.range.at === 'string' ? v.range.at.slice(0, 10) : '' };
     if (c.range && c.range.hi <= c.range.lo) delete c.range;
     if (v.guess === 'low' || v.guess === 'high') c.guess = v.guess;
-    const ids = ['match', 'five', 'arp', 'scale', 'minor', 'interval', 'sustain', 'echo', 'runs', 'harmony'];
+    const ids = ['match', 'five', 'arp', 'scale', 'minor', 'interval', 'sustain', 'echo', 'runs', 'harmony', 'cresc', 'steady', 'phrase', 'harm3m', 'harm3l', 'song'];
     c.sessions = Array.isArray(v.sessions) ? v.sessions.filter(x => isObj(x) && ids.includes(x.ex)).slice(-300).map(x => ({ d: typeof x.d === 'string' ? x.d.slice(0, 10) : '', ex: x.ex, score: Math.round(num(x.score, 0, 0, 100)), inTune: Math.round(num(x.inTune, 0, 0, 100)), cents: Math.round(num(x.cents, 0, -600, 600)), n: Math.round(num(x.n, 0, 0, 1000)) })) : [];
     c.best = {}; if (isObj(v.best)) ids.forEach(k => { if (v.best[k] !== undefined) c.best[k] = Math.round(num(v.best[k], 0, 0, 100)); });
     if (v.sustain !== undefined) c.sustain = Math.round(num(v.sustain, 0, 0, 600) * 10) / 10;
     if (isObj(v.warm)) c.warm = { n: Math.round(num(v.warm.n, 0, 0, 100000)), last: typeof v.warm.last === 'string' ? v.warm.last.slice(0, 10) : '' };
     c.lessons = {}; if (isObj(v.lessons)) Object.keys(v.lessons).forEach(k => { if (/^v-[a-z]{2,20}$/.test(k) && v.lessons[k] === true) c.lessons[k] = true; });
+    if (v.start !== undefined) c.start = Math.round(num(v.start, 1, 1, 6));
+    c.check = {}; if (isObj(v.check)) Object.keys(v.check).forEach(k => { if (/^L[1-6]$/.test(k) && isObj(v.check[k])) c.check[k] = { at: typeof v.check[k].at === 'string' ? v.check[k].at.slice(0, 10) : '' }; });
+    c.songs = {}; if (isObj(v.songs)) Object.keys(v.songs).slice(0, 100).forEach(k => { if (/^[a-z0-9-]{2,40}$/.test(k)) c.songs[k] = Math.round(num(v.songs[k], 0, 0, 100)); });
     out.voice = c;
   }
   if (out.routines) {

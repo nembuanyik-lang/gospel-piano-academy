@@ -59,8 +59,10 @@ const ACTIONS = {
     const ob = ui.onboarding;
     if (ob.step === 1) { ob.name = ($('#ob-name') || {}).value || ob.name; }
     if (ob.step === 3) { if (!ob.result) return; ob.step = 4; render(); return; }
+    if (ob.step === 5) { ob.step = 4; render(); window.scrollTo(0, 0); return; }
     ob.step++; render(); window.scrollTo(0, 0);
   },
+  obadv: () => { const ob = ui.onboarding; if (!ob || !ob.result) return; ob.step = 5; render(); window.scrollTo(0, 0); },
   obback: () => { const ob = ui.onboarding; if (ob.step === 1) { ob.name = ($('#ob-name') || {}).value || ob.name; } ob.step--; render(); },
   obskip: () => { S.profile.onboarded = true; touch(); ui.onboarding = null; go('home'); },
   obgoal: el => { const ob = ui.onboarding; ob.name = ($('#ob-name') || {}).value || ob.name; const g = el.dataset.g; ob.goals = ob.goals.includes(g) ? ob.goals.filter(x => x !== g) : ob.goals.concat([g]); render(); },
@@ -191,7 +193,7 @@ const BINDS = {
 };
 const LIVE = new Set(['pprogname', 'pbpm', 'pswing', 'pguidegain', 'pguidenudge', 'mxvol', 'mxpan', 'mxtone', 'mxcomp', 'mxroom', 'mxfx', 'pinfo', 'plgain', 'ploff', 'resettext', 'csearch', 'slbpm', 'ptitle', 'lchorus', 'lverse', 'lbridge', 'obname', 'pname']);
 /* the song project studio brings its own actions and bindings (views-project.js) */
-Object.assign(ACTIONS, PROJECT_ACTIONS, VOICE_ACTIONS, GOSPEL_ACTIONS);
+Object.assign(ACTIONS, PROJECT_ACTIONS, VOICE_ACTIONS, VOICE2_ACTIONS, GOSPEL_ACTIONS);
 Object.assign(BINDS, PROJECT_BINDS, GOSPEL_BINDS);
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]'); if (!el || el.disabled) return;

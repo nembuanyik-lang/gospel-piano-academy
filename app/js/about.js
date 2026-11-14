@@ -1,8 +1,28 @@
 'use strict';
 /* ---------------------------------------------------------------- version, what's new, credits
    APP_VERSION must match "version" in package.json (a unit test checks this). */
-const APP_VERSION = '2.12.0';
+const APP_VERSION = '2.14.0';
 const CHANGES = [
+  { v: '2.14.0', title: 'Vocal Studio: levels, checkpoints, singing songs, volume, rhythm and harmony', items: [
+    'New Levels tab: a starting test (about three minutes) decides where to begin, then six levels from First notes to Harmony. Each level has exercises with pass marks.',
+    'Every level ends with a recorded checkpoint: you sing it, listen back and save the file. A teacher, pastor or music director can then sign it off, and the sign-off shows on your progress report.',
+    'New Sing songs tab: sing any Songbook piece. It is put in the key that fits your voice, with four clicks and the backing track, and you are marked on the notes and on the beat.',
+    'New exercises: Swell (soft to loud), Even volume, Rhythm phrases, and Three parts (sing the middle or the low part while the app plays the other two).',
+    'Two new lessons (volume, singing on the beat), and "Hear an example" buttons on the lessons. The examples are played by the app\'s piano, not by a human voice.'] },
+  { v: '2.13.0', title: 'Cut, move and trim your recordings; real-looking keyboard and tuner', items: [
+    'Timeline (Record tab): cut a recording into pieces, move them, copy them, delete them, and put them all back as recorded. Undo brings every change back.',
+    'Drag the edge of a piece to trim it, and set a fade in and fade out. Every cut also gets a tiny automatic fade so it does not click.',
+    'Move a piece onto another recorded track by dragging it down or up, or by choosing the track from a list. It keeps playing the sound it came from.',
+    'The piano keys in Piano Lab and the voice tuner now look like real instruments.',
+    'While a track is cut into pieces, "Silence this part" and "Sing this part again" ask you to put the pieces back first.',
+    '"Listen" and "Save this track" now use your pieces, with their fades.',
+    'Three extra band parts you can switch on in the Arrange tab: rhythm guitar, horn stabs and a string pad. Each has its own strip in the Mixer.',
+    'Drum beats: soft hits (ghost notes) and strong hits (accents), a way to change a hit\'s strength with one click, and "My beats" to save a beat and use it in any song.',
+    'Three timed checkpoints, at the end of Level 1, Level 2 and the Gospel introduction: play the chords in time, with no hints, while the tempo climbs.',
+    'A longer starting check: if you do very well on the first twelve questions, twelve more show how far ahead you can start.',
+    'Six new Songbook pieces, up to Level 3 with seventh chords.',
+    'A daily ear-training item, chosen from where you are in the course, on the Home and Practice screens.'
+  ] },
   { v: '2.12.0', title: 'More bass, edit by hand, levels through the song, and a real mixer EQ', items: [
     'Seven new bass styles (slow worship, reggae, highlife, funk, Motown, Latin tumbao, Bikutsi/Assiko) and seven bass sounds (finger, pick, upright, fretless, slap, synth and sub). The bass sounds need the sound library.',
     'Fixed: the Gospel, Octave pump and Makossa bass styles went back to a plain bass when a saved song or backup was opened.',

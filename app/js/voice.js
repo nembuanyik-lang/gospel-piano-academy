@@ -17,6 +17,23 @@ function fitCanvas(cv) {
   return { W: cv.clientWidth || 900, H: cv.clientHeight || 220 };
 }
 
+/* a small piano keyboard down the left edge of a pitch graph, so the notes look like keys (white keys with their names, black keys shorter) */
+function drawKeyStrip(g, H, lo, hi, y, css) {
+  const rowH = Math.abs(y(1) - y(0)), a = Math.ceil(lo), b = Math.floor(hi), isB = m => [1, 3, 6, 8, 10].includes(((m % 12) + 12) % 12);
+  g.save();
+  g.fillStyle = '#F4F2EA'; g.fillRect(0, y(b) - rowH * 0.5, 38, (b - a + 1) * rowH);
+  g.strokeStyle = 'rgba(0,0,0,.3)'; g.lineWidth = 1;
+  for (let m = a; m <= b; m++) {
+    if (isB(m)) continue;
+    const full = m + 1 <= b && !isB(m + 1), yy = full ? y(m) - rowH * 0.5 : y(m + 1);   // E/F and B/C meet; other keys are separated at the black key's middle
+    if (m < b) { g.beginPath(); g.moveTo(full ? 0 : 24, Math.round(yy) + 0.5); g.lineTo(38, Math.round(yy) + 0.5); g.stroke(); }
+  }
+  g.font = '600 10px ' + (css.getPropertyValue('--font-mono') || 'monospace'); g.textBaseline = 'middle'; g.fillStyle = '#3B3C42';
+  for (let m = a; m <= b; m++) if (!isB(m) && (rowH >= 17 || m % 12 === 0)) g.fillText(voxName(m), 27, y(m));   // on a tight graph only the C keys are named
+  for (let m = a; m <= b; m++) if (isB(m)) { g.fillStyle = '#15161A'; g.fillRect(0, y(m) - rowH * 0.5 + 1, 24, rowH - 2); g.fillStyle = 'rgba(255,255,255,.16)'; g.fillRect(1, y(m) - rowH * 0.5 + 1, 22, 1.5); }
+  g.restore();
+}
+
 /* ---- grading ---- */
 const VOX_TOL = 25;                     // within 25 cents counts as in tune
 function voxNoteScore(c) { return c == null ? 0 : Math.max(0, Math.min(100, Math.round(100 - Math.max(0, Math.abs(c) - 10) * 2.2))); }
@@ -52,6 +69,12 @@ const VEX = [
   { id: 'sustain', title: 'Long, steady note', kind: 'sustain', mins: 3, about: 'Breath and support: hold one note, steady in pitch, for as long as you can.', tip: 'Breathe low into your belly and ribs. Let the air out slowly, as if through a straw.' },
   { id: 'echo', title: 'Echo the phrase', kind: 'echo', mins: 4, about: 'The app plays a short phrase; you sing it back. Builds your ear and musical memory, like learning a song by ear.', tip: 'Listen for the shape first: does it go up, down, or turn?' },
   { id: 'runs', title: 'Gospel runs', kind: 'runs', mins: 5, about: 'Pentatonic runs sung in time with the beat. Each round that is clean gets a little faster.', tip: 'Accuracy before speed. Every note of a run should be a real note.' },
+  { id: 'cresc', title: 'Swell: soft to loud', kind: 'dyn', dyn: 'cresc', mins: 4, about: 'Hold one note and change only the volume: grow from soft to full, then fade away. Volume control is what makes a song move people.', tip: 'Start soft but still clear. Add air a little at a time; do not push the throat.' },
+  { id: 'steady', title: 'Even volume', kind: 'dyn', dyn: 'steady', mins: 3, about: 'Hold a note at one steady volume. Even sound comes from even breath.', tip: 'Imagine the air as a thin, even ribbon. Do not let the end of the breath push the sound.' },
+  { id: 'phrase', title: 'Rhythm phrases', kind: 'phrase', mins: 5, about: 'Short phrases with long and short notes. Count in, then sing the right notes at the right moments.', tip: 'Tap the beat with your foot. A note that starts late is as wrong as a wrong note.' },
+  { id: 'harm3m', title: 'Three parts: the middle', kind: 'three', part: 'mid', mins: 5, about: 'The app plays the melody and the low part together. You sing the middle part: a third under the melody.', tip: 'Hold your note against two others. Do not drift towards the melody.' },
+  { id: 'harm3l', title: 'Three parts: the low part', kind: 'three', part: 'low', mins: 5, about: 'The app plays the melody and the middle part. You sing the low part: a fifth under the melody.', tip: 'The low part is the foundation. Sing it firmly and steadily.' },
+  { id: 'song', title: 'Sing a Songbook piece', kind: 'song', hidden: true, mins: 4, about: 'Sing a melody from the Songbook with the backing track.', tip: 'Follow the bars as they come. Breathe at the rests.' },
   { id: 'harmony', title: 'Harmony: a third below', kind: 'harmony', mins: 5, about: 'The app plays the melody note by note; you sing the harmony a third below, the way altos and tenors often sing.', tip: 'Hold your own line. Listen to the melody, then find the note a third under it.' }
 ];
 const vexById = id => VEX.find(x => x.id === id);
@@ -110,6 +133,42 @@ function vexHarmony(n) {
   return out;
 }
 
+/* three-part harmony: melody in a major key, the middle part a third under it, the low part a fifth under it */
+function vexThree(part, n) {
+  const z = voxZone(), out = [], MAJ = [0, 2, 4, 5, 7, 9, 11];
+  const deg = (tonic, d) => tonic + 12 * Math.floor((d - 1) / 7) + MAJ[((d - 1) % 7 + 7) % 7];
+  for (let i = 0; i < n; i++) {
+    const mel = HARM_MELODIES[i % HARM_MELODIES.length], lowest = Math.min.apply(null, mel) - 4, sung = part === 'low' ? -4 : -2;
+    let tonic = z.lo - 12; while (deg(tonic, lowest) < z.lo - (part === 'low' ? 0 : 3) || deg(tonic, Math.min.apply(null, mel) + sung) < z.lo) tonic++;
+    const m = mel.map(d => deg(tonic, d)), mid = mel.map(d => deg(tonic, d - 2)), low = mel.map(d => deg(tonic, d - 4));
+    out.push({ play: m, sing: part === 'low' ? low : mid, melody: m, accomp: part === 'low' ? mid : low, harmony: true, three: true });
+  }
+  return out;
+}
+/* rhythm phrases: a short walk on the pentatonic scale in the singer's zone, with long and short notes, at 80 beats a minute */
+function vexPhrases(n) {
+  const z = voxZone(), out = [], bpm = 80, sec = 60 / bpm, rs = VocalGrade.PHRASE_RHYTHMS, off = rnd(0, rs.length - 1);
+  for (let i = 0; i < n; i++) {
+    const rh = rs[(off + i) % rs.length], base = rnd(z.lo, Math.max(z.lo, z.hi - 9)); let idx = rnd(0, 3);
+    const notes = rh.map((_, k) => { if (k) idx = Math.max(0, Math.min(5, idx + [-2, -1, 1, 2][rnd(0, 3)])); return Math.min(voxRange().hi, base + PENTA[idx]); });
+    let c = 0; const times = rh.map(b => { const t = { s: c * sec, e: (c + b) * sec }; c += b; return t; });
+    out.push({ play: notes, sing: notes, rhythm: true, times, bpm, label: 'Rhythm phrase' });
+  }
+  return out;
+}
+/* a Songbook piece in the key and octave that fit the singer's range */
+function songItem(id) {
+  const song = App.SONGBOOK.find(s => s.id === id); if (!song) return null;
+  const k = VocalGrade.songKey(song, voxRange()), notes = VocalGrade.songNotes(song, k.key, k.octave), sec = 60 / song.bpm;
+  const M = App.sbBuild(Object.assign({}, song, { key: k.key }));
+  return { play: notes.map(x => x.m), sing: notes.map(x => x.m), rhythm: true, song: true, times: notes.map(x => ({ s: x.beat * sec, e: (x.beat + x.beats) * sec })), bpm: song.bpm, cin: song.ts || 4, backing: M.backing, total: M.total, label: song.title + ' in ' + k.key, fits: k.fits };
+}
+function voxChord(notes, d) { return Snd.play({ events: [{ t: 0, d: d * 0.92, notes, vel: 0.75 }], bpm: 60, total: d }, { force: true, inst: () => 'piano' }); }
+function voxPlayRhythm(notes, times, bpm) {
+  const sec = 60 / bpm, ev = notes.map((m, i) => ({ t: times[i].s / sec, d: Math.max(0.2, (times[i].e - times[i].s) / sec * 0.92), notes: [m], vel: 0.75 }));
+  return Snd.play({ events: ev, bpm, total: times[times.length - 1].e / sec + 0.2 }, { force: true, inst: () => 'piano' });
+}
+
 /* ---- playing reference notes ---- */
 function voxPlay(notes, o) {
   o = o || {};
@@ -128,6 +187,10 @@ const VEX_STEPS = {
   interval: ['The app plays a starting note and names an interval (for example "a perfect 5th").', 'At YOUR TURN, sing the note that interval above the starting note, without hearing it first.', 'Hold it until it turns green. Then the app plays the right note so you can compare.'],
   sustain: ['Listen to the note and take a low, full breath (belly and ribs widen).', 'At YOUR TURN, sing it on "ah" and hold it as long and as steady as you can.', 'Keep the line flat and green. The timer shows how long you hold it.', 'Stop when you run out of breath: the app scores the length and the steadiness.'],
   runs: ['Listen to the run, then four clicks count you in.', 'Straight after the clicks, sing the run at the same speed without stopping.', 'This one is timed: do not wait for green boxes. Each note is scored at its moment.', 'A clean run makes the next one a little faster.'],
+  dyn: ['Listen to the note. Take a low, full breath.', 'At YOUR TURN, sing it on "ah" for five seconds. The goal is the volume, not the pitch: keep the note steady and change only how loud it is.', 'Swell: begin soft and grow. Fade: begin full and soften. Steady: keep it exactly the same.', 'The app compares the volume with itself, so it does not matter how near the microphone is. Stay at the same distance.'],
+  phrase: ['Listen to the phrase: some notes are long, some short.', 'Four clicks count you in. Sing the phrase after them: the notes slide towards the line, and you sing each one as it reaches it.', 'You are marked on the notes and on when each one begins.', 'Headphones help, so the clicks are not heard by the microphone.'],
+  song: ['Four clicks count you in, then the backing track plays.', 'Sing the melody as the notes reach the line. The bars show how long each note lasts.', 'The piece is put in the key that fits your voice.', 'Headphones help: the microphone should hear your voice, not the piano.'],
+  three: ['The app plays two parts together, one note at a time.', 'You sing the third part. Hold your note until its box turns green.', 'Do not let the other parts pull you off your note. That is the skill.', 'Headphones help most here.'],
   harmony: ['The app plays one melody note at a time. Its name is under each box.', 'After each melody note, sing the harmony note in the box: a third below the melody.', 'Hold it until it turns green; then the next melody note plays.', 'Headphones help most here.']
 };
 const VEX_BEFORE = ['Wear headphones if you have them. If not, keep the speakers at a medium volume: the app waits for the piano to fade before it listens.', 'Sit or stand tall, about a hand-width from the microphone.', 'When you press Start, stay quiet for one second while the app measures the room.'];
@@ -146,6 +209,10 @@ function runVoiceEx(host, def, opts) {
   else if (kind === 'sustain') { const z = voxZone(), m = Math.round((z.lo + z.hi) / 2) - 2; items = [{ play: [m], sing: [m], sustain: true }]; }
   else if (kind === 'runs') { const z = voxZone(); items = []; let step = 0.42; for (let i = 0; i < (opts.rounds || 6); i++) { const pat = RUNS[i % RUNS.length], span = Math.max.apply(null, pat); const base = Math.max(z.lo, Math.min(z.hi - span, z.lo + rnd(0, 3))); items.push({ play: pat.map(p => base + p), sing: pat.map(p => base + p), timed: true, step }); } }
   else if (kind === 'harmony') items = vexHarmony(opts.count || 3).map(h => ({ play: h.melody, sing: h.harmony, melody: h.melody, harmony: true }));
+  else if (kind === 'three') items = vexThree(def.part, opts.count || 3);
+  else if (kind === 'dyn') { const z = voxZone(), m = Math.round((z.lo + z.hi) / 2) - 1, L = { cresc: 'Swell: begin softly and grow louder', dim: 'Fade: begin firmly and get softer', steady: 'Steady: keep the volume the same' }; items = (def.dyn === 'steady' ? ['steady', 'steady', 'steady'] : ['cresc', 'dim', 'cresc']).map(d => ({ play: [m], sing: [m], dyn: d, secs: 5, label: L[d] })); }
+  else if (kind === 'phrase') items = vexPhrases(opts.count || 5);
+  else if (kind === 'song') items = [songItem(opts.song)].filter(Boolean);
   const results = [];             // one entry per sung note: { target, cents, score, steady }
   let iItem = 0, iNote = 0, phase = 'idle', tracker = null, player = null, seg = [], lastOk = 0, noteStart = 0, timer = null, stopped = false;
   let trace = [], cur = null, holdBest = 0, holdStart = null, lastVoiced = 0, timedFrames = [], timedT0 = 0;
@@ -175,6 +242,7 @@ function runVoiceEx(host, def, opts) {
     }).join('');
   }
   function drawTrace() {
+    if (item() && item().rhythm && phase === 'sing') return drawRhythm();
     const { W, H } = fitCanvas(cv), now = Snd.now(), span = 6;
     const it = item(), tgts = it ? it.sing.concat(it.melody || []) : [60];
     let lo = Math.min.apply(null, tgts) - 4, hi = Math.max.apply(null, tgts) + 4;
@@ -186,7 +254,8 @@ function runVoiceEx(host, def, opts) {
     const line = css.getPropertyValue('--line').trim() || '#ccc', muted = css.getPropertyValue('--muted').trim() || '#888', acc = css.getPropertyValue('--accent').trim() || '#a02040', ok = css.getPropertyValue('--ok').trim() || '#2a8', warn = css.getPropertyValue('--warn').trim() || '#d80';
     g2.clearRect(0, 0, W, H);
     g2.font = '12px ' + (css.getPropertyValue('--font-mono') || 'monospace'); g2.textBaseline = 'middle';
-    for (let m = Math.ceil(lo); m <= hi; m++) { if ([1, 3, 6, 8, 10].includes(((m % 12) + 12) % 12)) continue; g2.strokeStyle = line; g2.globalAlpha = 0.6; g2.beginPath(); g2.moveTo(40, y(m)); g2.lineTo(W, y(m)); g2.stroke(); g2.globalAlpha = 1; g2.fillStyle = muted; g2.fillText(voxName(m), 4, y(m)); }
+    for (let m = Math.ceil(lo); m <= hi; m++) { if ([1, 3, 6, 8, 10].includes(((m % 12) + 12) % 12)) continue; g2.strokeStyle = line; g2.globalAlpha = 0.6; g2.beginPath(); g2.moveTo(40, y(m)); g2.lineTo(W, y(m)); g2.stroke(); g2.globalAlpha = 1; }
+    drawKeyStrip(g2, H, lo, hi, y, css);
     if (it) [...new Set(it.sing)].forEach(m => { g2.strokeStyle = acc; g2.lineWidth = m === target() && phase === 'sing' ? 3 : 1.5; g2.globalAlpha = m === target() && phase === 'sing' ? 1 : 0.45; g2.beginPath(); g2.moveTo(40, y(m)); g2.lineTo(W, y(m)); g2.stroke(); g2.globalAlpha = 1; g2.lineWidth = 1; });
     let prev = null;
     trace.forEach(p => {
@@ -209,8 +278,8 @@ function runVoiceEx(host, def, opts) {
   }
   const fb = (t, cls) => { fbEl.textContent = t; fbEl.className = 'vx-fb' + (cls ? ' ' + cls : ''); };
 
-  function record(cents, steady) {
-    results.push({ item: iItem, k: iNote, target: target(), cents, steady, score: voxNoteScore(cents) });
+  function record(cents, steady, score, onset) {
+    results.push({ item: iItem, k: iNote, target: target(), cents, steady, score: score != null ? score : voxNoteScore(cents), onset: onset == null ? null : onset });
     paintTargets();
   }
   function finishNote(cents, steady) {
@@ -229,12 +298,16 @@ function runVoiceEx(host, def, opts) {
     timer = setTimeout(() => { if (stopped) return; iItem++; iNote = 0; if (iItem >= items.length) finishAll(); else startItem(); }, delay || 700);
   }
   function startItem() {
+    if (!item()) { finishAll(); return; }
     setPhase('listen', 'Listen');
     const it = item(); iNote = 0; seg = []; holdBest = 0; holdStart = null; paintTargets();
-    if (it.harmony) { instr.textContent = 'The app plays a melody note; sing the note a third below it. Hold each note until it turns green.'; promptHarmony(); return; }
+    if (it.harmony) { instr.textContent = it.three ? 'The app plays two parts together. Sing the third part and hold each note until it turns green.' : 'The app plays a melody note; sing the note a third below it. Hold each note until it turns green.'; promptHarmony(); return; }
+    if (it.rhythm) { phase = 'listen'; instr.textContent = it.song ? it.label + '. Get ready: four clicks, then the backing starts.' : 'Listen to the phrase, then count in and sing it on the beat.'; clearTimeout(timer);
+      if (it.song) { timer = setTimeout(() => { if (!stopped) beginCount(); }, 1500); return; }
+      player = voxPlayRhythm(it.play, it.times, it.bpm); timer = setTimeout(() => { if (!stopped) settle(beginCount); }, (it.times[it.times.length - 1].e + 0.2) * 1000 + 120); return; }
     phase = 'listen';
     instr.textContent = it.label ? it.label + '. Listen to the starting note…' : it.sustain ? 'Listen, then hold this note as long as you can, steady.' : it.timed ? 'Listen to the run, then sing it in time after the clicks.' : 'Listen…';
-    const d = it.timed ? it.step * 100 / 60 : kind === 'match' ? 1.6 : kind === 'interval' ? 1.4 : 0.75;
+    const d = it.timed ? it.step * 100 / 60 : kind === 'match' ? 1.6 : kind === 'interval' ? 1.4 : kind === 'dyn' ? 1.3 : 0.75;
     player = voxPlay(it.play, it.timed ? { bpm: 100, d: it.step * 100 / 60, clicks: 4 } : { bpm: 60, d });
     const len = it.timed ? (it.play.length * it.step * 100 / 60 + 4) * 60 / 100 : it.play.length * d;
     clearTimeout(timer);
@@ -242,7 +315,7 @@ function runVoiceEx(host, def, opts) {
   }
   function promptHarmony() {
     const it = item(); phase = 'listen'; setPhase('listen', 'Listen: melody note'); paintTargets();
-    player = voxPlay([it.melody[iNote]], { bpm: 60, d: 1.1 });
+    player = it.accomp ? voxChord([it.melody[iNote], it.accomp[iNote]], 1.1) : voxPlay([it.melody[iNote]], { bpm: 60, d: 1.1 });
     clearTimeout(timer);
     timer = setTimeout(() => { if (!stopped) settle(() => { phase = 'sing'; setPhase('sing', 'Your turn: sing'); noteStart = Snd.now(); seg = []; paintTargets(); fb(''); }); }, 1150);
   }
@@ -253,6 +326,7 @@ function runVoiceEx(host, def, opts) {
     const it = item();
     setPhase('sing', it.timed ? 'Your turn: sing the run now' : 'Your turn: sing');
     phase = 'sing'; noteStart = Snd.now(); seg = []; paintTargets(); fb('');
+    if (it.dyn) { dynStart = null; dynFrames = []; seg = []; instr.textContent = it.label + '. Sing "ah" now.'; return; }
     if (it.sustain) { instr.textContent = 'Now: hold ' + voxName(it.sing[0]) + ' as long as you can.'; holdStart = null; return; }
     if (it.timed) { instr.textContent = 'Now: sing the run in time!'; timedT0 = Snd.now(); timedFrames = []; clearTimeout(timer); timer = setTimeout(() => { if (!stopped) gradeTimed(); }, (it.sing.length * it.step + 0.4) * 1000); return; }
     instr.textContent = it.label ? it.label + '. Sing it now.' : 'Your turn: sing ' + (it.sing.length > 1 ? 'each note' : 'the note') + ' and hold it until it turns green.';
@@ -270,6 +344,48 @@ function runVoiceEx(host, def, opts) {
     if (avg < 70 && items[iItem + 1]) items[iItem + 1].step = it.step;
     nextItem(1500);
   }
+  /* sing against a clock: four clicks (a bar in 3-time), then the notes; marks pitch and timing together */
+  function beginCount() {
+    const it = item(); if (!it) return;
+    const sec = 60 / it.bpm, cin = it.cin || 4;
+    seg = []; timedFrames = []; phase = 'sing'; setPhase('sing', 'Count in… then sing on the beat'); noteStart = Snd.now(); paintTargets(); fb('');
+    instr.textContent = 'Clicks first. Sing each note as it reaches the line.';
+    const ev = Array.from({ length: cin }, (_, i) => ({ t: i, d: 0.2, click: i === 0 ? 2 : 1 })).concat((it.backing || []).map(x => Object.assign({}, x, { t: x.t + cin })));
+    timedT0 = Snd.now() + 0.08 + cin * sec;
+    player = Snd.play({ events: ev, bpm: it.bpm, total: (it.total || 0) + cin }, { force: true, inst: () => Snd.backingInst() });
+    clearTimeout(timer); timer = setTimeout(() => { if (!stopped) gradeRhythm(); }, (cin * sec + it.times[it.times.length - 1].e + 0.5) * 1000);
+  }
+  function gradeRhythm() {
+    const it = item(); if (!it) return;
+    const res = VocalGrade.gradeNotes(it.times.map((tm, k) => ({ m: it.sing[k], s: tm.s, e: tm.e })), timedFrames.map(f => ({ t: f.t - timedT0, m: f.m })));
+    res.forEach((r, k) => { iNote = k; record(r.cents, null, r.score, r.onset); });
+    const sc = res.map(r => r.score), avg = Math.round(sc.reduce((a, x) => a + x, 0) / sc.length), on = res.filter(r => r.onset != null).map(r => r.onset);
+    const mean = on.length ? on.reduce((a, x) => a + x, 0) / on.length : null;
+    fb('Scored ' + avg + '. ' + (mean == null ? 'Few notes were heard: sing a little louder and closer to the microphone.' : Math.abs(mean) < 0.08 ? 'Right on the beat.' : mean > 0 ? 'You came in about ' + Math.round(mean * 1000) + ' ms late on average: think of the note a moment sooner.' : 'You came in about ' + Math.round(-mean * 1000) + ' ms early on average: wait for the beat.'), avg >= 65 ? 'ok' : 'bad');
+    nextItem(it.song ? 600 : 1800);
+  }
+  let dynStart = null, dynFrames = [];
+  function finishDyn() {
+    const it = item(); if (!it || phase !== 'sing') return;
+    const g = VocalGrade.gradeDyn(dynFrames, it.dyn), cents = seg.length ? Pitch.median(seg) : null;
+    phase = 'pause'; dynStart = null; dynFrames = [];
+    results.push({ item: iItem, k: 0, target: it.sing[0], cents, steady: null, score: g.score, rise: g.rise });
+    paintTargets(); fb('Scored ' + g.score + '. ' + g.text, g.score >= 65 ? 'ok' : 'bad'); nextItem(2200);
+  }
+  /* the rhythm picture: bars scroll towards the line; your voice is drawn over them */
+  function drawRhythm() {
+    const { W, H } = fitCanvas(cv), now = Snd.now(), it = item(), span = 6, back = 1.5;
+    const css = getComputedStyle(document.documentElement), acc = css.getPropertyValue('--accent').trim() || '#a02040', ok = css.getPropertyValue('--ok').trim() || '#2a8', warn = css.getPropertyValue('--warn').trim() || '#d80', line = css.getPropertyValue('--line').trim() || '#ccc';
+    let lo = Math.min.apply(null, it.sing) - 3, hi = Math.max.apply(null, it.sing) + 3; if (hi - lo < 10) { const mid = (hi + lo) / 2; lo = mid - 5; hi = mid + 5; }
+    const y = m => H - 8 - (m - lo) / (hi - lo) * (H - 16), x = t => 40 + (W - 48) * ((t - (now - back)) / span), rowH = Math.abs(y(1) - y(0));
+    g2.clearRect(0, 0, W, H);
+    for (let m = Math.ceil(lo); m <= hi; m++) { if ([1, 3, 6, 8, 10].includes(((m % 12) + 12) % 12)) continue; g2.strokeStyle = line; g2.globalAlpha = 0.5; g2.beginPath(); g2.moveTo(40, y(m)); g2.lineTo(W, y(m)); g2.stroke(); g2.globalAlpha = 1; }
+    drawKeyStrip(g2, H, lo, hi, y, css);
+    it.times.forEach((tm, k) => { const a = x(timedT0 + tm.s), b = x(timedT0 + tm.e); if (b < 40 || a > W) return; g2.fillStyle = acc; g2.globalAlpha = now >= timedT0 + tm.s && now <= timedT0 + tm.e ? 0.95 : 0.4; g2.fillRect(Math.max(40, a), y(it.sing[k]) - rowH * 0.4, Math.max(3, b - a - 2), rowH * 0.8); g2.globalAlpha = 1; });
+    g2.strokeStyle = css.getPropertyValue('--text').trim() || '#222'; g2.lineWidth = 2; g2.beginPath(); g2.moveTo(x(now), 0); g2.lineTo(x(now), H); g2.stroke(); g2.lineWidth = 1;
+    let prev = null;
+    timedFrames.forEach(p => { if (now - p.t > back || p.m == null) { prev = null; return; } const px = x(p.t), py = y(p.m); const act = it.times.findIndex((tm, k) => p.t - timedT0 >= tm.s - 0.15 && p.t - timedT0 <= tm.e), c = act >= 0 ? Math.abs(Pitch.centsToTarget(p.m, it.sing[act], true)) : 999; g2.strokeStyle = c <= VOX_TOL ? ok : c <= 60 ? warn : acc; if (prev) { g2.lineWidth = 3; g2.beginPath(); g2.moveTo(prev.x, prev.y); g2.lineTo(px, py); g2.stroke(); g2.lineWidth = 1; } prev = { x: px, y: py }; });
+  }
   function onFrame(f) {
     if (stopped) return;
     const tNow = f.t;
@@ -286,7 +402,13 @@ function runVoiceEx(host, def, opts) {
     readout(f); drawTrace();
     if (phase !== 'sing') return;
     const it = item();
-    if (it.timed) { timedFrames.push({ t: tNow, m: f.midi }); return; }
+    if (it.timed || it.rhythm) { timedFrames.push({ t: tNow, m: f.midi }); if (timedFrames.length > 4000) timedFrames.shift(); return; }
+    if (it.dyn) {
+      if (f.midi != null && Math.abs(c) <= 100) { if (dynStart == null) dynStart = tNow; dynFrames.push({ t: tNow, level: f.level }); seg.push(c); lastVoiced = tNow; instr.textContent = it.label + ': ' + Math.min(it.secs, tNow - dynStart).toFixed(1) + ' of ' + it.secs + ' s'; if (tNow - dynStart >= it.secs) finishDyn(); }
+      else if (dynStart != null && tNow - lastVoiced > 0.5) { if (lastVoiced - dynStart >= 2) finishDyn(); else { dynStart = null; dynFrames = []; seg = []; } }
+      if (phase === 'sing' && tNow - noteStart > 16) finishDyn();
+      return;
+    }
     if (it.sustain) {
       if (f.midi != null && Math.abs(c) <= 40) { if (holdStart == null) holdStart = tNow; lastVoiced = tNow; seg.push(c); }
       else if (holdStart != null && tNow - lastVoiced > 0.25) {
@@ -321,9 +443,10 @@ function runVoiceEx(host, def, opts) {
     const inTune = n ? Math.round(100 * results.filter(r => r.cents != null && Math.abs(r.cents) <= VOX_TOL).length / n) : 0;
     const lean = sung.length ? Math.round(sung.reduce((a, r) => a + r.cents, 0) / sung.length) : 0;
     const secs = results.filter(r => r.seconds != null).map(r => r.seconds);
-    const summary = { ex: def.id, score, inTune, cents: lean, n, seconds: secs.length ? Math.max.apply(null, secs) : null };
+    const ons = results.filter(r => r.onset != null).map(r => Math.abs(r.onset));
+    const summary = { ex: def.id, score, inTune, cents: lean, n, seconds: secs.length ? Math.max.apply(null, secs) : null, timing: ons.length ? Math.round(1000 * ons.reduce((a, x) => a + x, 0) / ons.length) : null };
     instr.textContent = 'Finished.';
-    host.querySelector('.vx').insertAdjacentHTML('beforeend', '<div class="vx-sum"><h3>' + score + ' / 100</h3><p>' + inTune + '% of notes in tune' + (summary.seconds != null ? ' · held ' + summary.seconds + ' s' : '') + '. ' +
+    host.querySelector('.vx').insertAdjacentHTML('beforeend', '<div class="vx-sum"><h3>' + score + ' / 100</h3><p>' + inTune + '% of notes in tune' + (summary.seconds != null ? ' · held ' + summary.seconds + ' s' : '') + (summary.timing != null ? ' · on average ' + summary.timing + ' ms from the beat' : '') + '. ' +
       (sung.length >= 4 && Math.abs(lean) >= 12 ? 'You tend to sing ' + (lean > 0 ? 'sharp (a little high)' : 'flat (a little low)') + ' by about ' + Math.abs(lean) + ' cents: ' + (lean > 0 ? 'relax and let the note settle.' : 'keep the breath flowing and think the note slightly higher.') : sung.length >= 4 ? 'No sharp or flat tendency: well centred.' : '') + '</p></div>');
     if (opts.onDone) opts.onDone(summary, results);
   }
@@ -428,6 +551,16 @@ const VOX_LESSONS = [
     'Learn every run slowly first, note by note, then speed it up only when it is clean.',
     'Keep runs light; heavy runs get muddy. Use them to serve the words, not to show off.',
     'Copy runs from singers you admire: slow them down, sing them note by note, then at speed.'] },
+  { id: 'v-volume', title: 'Volume and expression', ex: ['cresc', 'steady'], points: [
+    'Volume is part of the message. A song that is the same loudness from start to finish feels flat, even when every note is right.',
+    'To get louder, add air and open the mouth; do not push from the throat. To get softer, keep the support and let less air out.',
+    'Practise one note: begin softly and grow for five seconds, then begin full and fade. Then keep it perfectly even.',
+    'In a song, plan it: start a verse softer, build through the chorus, and keep the last line fullest. The app measures how your volume moves.'] },
+  { id: 'v-rhythm', title: 'Singing on the beat', ex: ['phrase'], points: [
+    'A right note at the wrong time is a wrong note. Singers who are exactly on the beat sound confident.',
+    'Feel the beat in your body first: tap your foot, then sing. Start each note when the beat arrives, not after.',
+    'Long notes are counted too: hold them until the next beat, then let go together with the band.',
+    'The app marks pitch and timing together, and tells you if you tend to come in early or late.'] },
   { id: 'v-harmony', title: 'Singing harmony', ex: ['harmony', 'interval'], points: [
     'Harmony singers often sing a third below the melody (altos and tenors) or a third above (sopranos).',
     'Thirds follow the key: sometimes a major third, sometimes a minor third. Let your ear and the chords guide you.',
@@ -469,13 +602,16 @@ function bestKeyFor(P) {
 let vxRun = null;
 function viewVoice() {
   const p = route.params || {}, tab = p.tab || 'today', v = voxState(), r = voxRange(), vt = voiceType(v.range);
-  const tabs = [['today', 'Today'], ['exercises', 'Exercises'], ['tuner', 'Free singing'], ['learn', 'Learn'], ['progress', 'My voice']];
+  const tabs = [['today', 'Today'], ['levels', 'Levels'], ['exercises', 'Exercises'], ['sing', 'Sing songs'], ['tuner', 'Free singing'], ['learn', 'Learn'], ['progress', 'My voice']];
   const head = '<div class="pagehead"><h1>Vocal Studio</h1><p class="muted">Train your voice with the microphone: in tune, steady, agile, and in harmony. ' +
     (v.range ? 'Your range: <b>' + esc(voxName(r.lo)) + ' to ' + esc(voxName(r.hi)) + '</b>' + (vt ? ' (close to ' + esc(vt.name) + ')' : '') + '.' : 'Start by finding your range, so every exercise fits your voice.') + '</p>' +
     '<div class="seg ptabs" role="tablist" aria-label="Vocal Studio sections">' + tabs.map(t => '<button type="button" role="tab" class="' + (t[0] === tab ? 'on' : '') + '" aria-selected="' + (t[0] === tab) + '" data-act="vxgo" data-tab="' + t[0] + '">' + t[1] + '</button>').join('') + '</div></div>';
   const micRow = '<div class="row wrap vx-mic"><label class="field"><span>Microphone</span><select id="vxmic" data-bind="pmic"><option value="">Windows default microphone</option></select></label><p class="tiny">Wear headphones if you can. Sing about a hand-width from the microphone.</p></div>';
   let body = '';
-  if (p.run || p.range || p.warm) body = '<section class="card"><div id="vxhost"></div><div class="row wrap" id="vxafter" hidden><button class="btn primary" type="button" data-act="vxgo" data-tab="' + esc(tab) + '">Done</button>' + (p.run ? '<button class="btn ghost" type="button" data-act="vxagain" data-ex="' + esc(p.run) + '">' + icon('replay') + 'Again</button>' : '') + '</div></section>';
+  if (p.run || p.range || p.warm || p.test || p.song) body = '<section class="card"><div id="vxhost"></div><div class="row wrap" id="vxafter" hidden><button class="btn primary" type="button" data-act="vxgo" data-tab="' + esc(tab) + '">Done</button>' + (p.run ? '<button class="btn ghost" type="button" data-act="vxagain" data-ex="' + esc(p.run) + '">' + icon('replay') + 'Again</button>' : '') + '</div></section>';
+  else if (p.check) body = vxCheckHtml(+p.check, v);
+  else if (tab === 'levels') body = vxLevelsHtml(v) + micRow;
+  else if (tab === 'sing') body = vxSongsHtml(v) + micRow;
   else if (tab === 'today') {
     const t = ensureToday(), warm = v.warm || {};
     body = howTo('voice', 'How to use the Vocal Studio', ['Choose your microphone at the bottom of this page. Headphones help.', 'Find your range once (one minute). Every exercise is then pitched for your voice.', 'Do the warm-up before you sing for long, then pick exercises from the Exercises tab. Each one explains itself before you start.', 'In each exercise: LISTEN means the app is playing; YOUR TURN means sing. Hold each note until its box turns green.', 'My voice shows your progress, whether you tend to sing sharp or flat, and the best key for your songs.']) + (v.range ? '' : '<section class="card callout"><h3>First: find your range</h3><p>Sing your lowest and highest comfortable notes. It takes one minute, and every exercise will then fit your voice.</p><div class="row wrap"><button class="btn primary" type="button" data-act="vxgo" data-range="1" data-tab="today">' + icon('mic') + 'Find my range</button>' +
@@ -484,11 +620,12 @@ function viewVoice() {
       '<ol class="vx-steps">' + VOX_WARMUP.map(s => '<li>' + esc(s.kind === 'self' ? s.title + ': ' + s.text : vexById(s.id).title) + '</li>').join('') + '</ol>' +
       '<div class="row wrap"><button class="btn primary" type="button" data-act="vxgo" data-warm="1" data-tab="today">' + icon('play') + 'Start the warm-up</button><span class="tiny">' + (warm.n ? 'Done ' + warm.n + (warm.n === 1 ? ' time' : ' times') + '.' : '') + '</span></div></section>' + micRow;
   } else if (tab === 'exercises') {
-    body = '<div class="vx-grid">' + VEX.map(x => '<section class="card"><p class="eyebrow">' + x.mins + ' min' + (v.best[x.id] ? ' · best ' + v.best[x.id] : '') + '</p><h3>' + esc(x.title) + '</h3><p class="muted">' + esc(x.about) + '</p><p class="tiny">Tip: ' + esc(x.tip) + '</p><button class="btn primary sm" type="button" data-act="vxgo" data-tab="exercises" data-run="' + x.id + '">' + icon('play') + 'Start</button></section>').join('') + '</div>' + micRow;
+    body = '<div class="vx-grid">' + VEX.filter(x => !x.hidden).map(x => '<section class="card"><p class="eyebrow">' + x.mins + ' min' + (v.best[x.id] ? ' · best ' + v.best[x.id] : '') + '</p><h3>' + esc(x.title) + '</h3><p class="muted">' + esc(x.about) + '</p><p class="tiny">Tip: ' + esc(x.tip) + '</p><button class="btn primary sm" type="button" data-act="vxgo" data-tab="exercises" data-run="' + x.id + '">' + icon('play') + 'Start</button></section>').join('') + '</div>' + micRow;
   } else if (tab === 'tuner') {
     body = '<section class="card"><p class="muted">Sing anything: a song, a scale, a long note. The screen shows the note you are singing and how close you are to it. Use it to check yourself or to tune your voice to the keyboard.</p><div id="vxtuner"></div></section>' + micRow;
   } else if (tab === 'learn') {
     body = VOX_LESSONS.map(l => '<section class="card"><p class="eyebrow">' + (v.lessons[l.id] ? '<span class="tag ok">Read</span>' : 'Lesson') + '</p><h3>' + esc(l.title) + '</h3><ul>' + l.points.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' +
+      (vxExamples(l.id).length ? '<p class="eyebrow">Hear an example <span class="tiny">(played by the app\'s piano, not a human voice)</span></p><div class="row wrap">' + vxExamples(l.id).map((e, k) => '<button class="btn ghost sm" type="button" data-act="vxhear" data-id="' + l.id + '" data-k="' + k + '">' + icon('play') + esc(e.label) + '</button>').join('') + '</div>' : '') +
       '<div class="row wrap">' + l.ex.map(id => '<button class="btn soft sm" type="button" data-act="vxgo" data-tab="learn" data-run="' + id + '">' + icon('play') + 'Practise: ' + esc(vexById(id).title) + '</button>').join('') + (v.lessons[l.id] ? '' : '<button class="btn ghost sm" type="button" data-act="vxread" data-id="' + l.id + '">' + icon('check') + 'Mark as read</button>') + '</div></section>').join('');
   } else {
     const ses = v.sessions.slice(-40), last = ses.slice(-14);
@@ -508,9 +645,13 @@ function viewVoice() {
     const mic = $('#vxmic', root);
     if (mic) listMics().then(ms => { mic.innerHTML = '<option value="">Windows default microphone</option>' + ms.filter(m => m.deviceId && m.deviceId !== 'default' && m.deviceId !== 'communications').map((m, i) => '<option value="' + esc(m.deviceId) + '"' + (m.deviceId === S.prefs.micId ? ' selected' : '') + '>' + esc(m.label || ('Microphone ' + (i + 1))) + '</option>').join(''); });
     const host = $('#vxhost', root), after = $('#vxafter', root);
-    if (host && p.range) vxRun = runRangeFinder(host, rg => { voxState().range = { lo: rg.lo, hi: rg.hi, at: E.dateStr() }; delete voxState().guess; touch(); toast('Range saved: ' + voxName(rg.lo) + ' to ' + voxName(rg.hi) + '.'); go('voice', { tab: p.tab || 'today' }); });
+    if (host && p.range) vxRun = runRangeFinder(host, rg => { voxState().range = { lo: rg.lo, hi: rg.hi, at: E.dateStr() }; delete voxState().guess; touch(); toast('Range saved: ' + voxName(rg.lo) + ' to ' + voxName(rg.hi) + '.'); go('voice', p.next === 'test' ? { tab: 'levels', test: 1 } : { tab: p.tab || 'today' }); });
+    else if (host && p.test) vxRun = runStartTest(host, r => { voxState().start = r.start; touch(); award(5, 'voice'); after.hidden = false; toast(r.start > 1 ? 'You can begin at level ' + r.start + '. Levels 1' + (r.start > 2 ? ' and 2' : '') + ' stay open if you want them.' : 'Begin at level 1.'); });
+    else if (host && p.song) vxRun = runVoiceEx(host, vexById('song'), { song: p.song, onDone: sum => { voxSave(sum); const vs = voxState(); vs.songs = vs.songs || {}; if ((vs.songs[p.song] || 0) < sum.score) vs.songs[p.song] = sum.score; touch(); award(5, 'voice'); after.hidden = false; }, onStop: () => { after.hidden = false; } });
     else if (host && p.run) { const def = vexById(p.run); if (def) vxRun = runVoiceEx(host, def, { onDone: sum => { voxSave(sum); award(5, 'voice'); after.hidden = false; }, onStop: () => { after.hidden = false; } }); }
     else if (host && p.warm) vxRun = runWarmup(host, () => { after.hidden = false; });
+    const rec = $('#vxrec', root);
+    if (rec) { const rc = mountAudioRecorder(rec, { name: 'vocal-checkpoint-level-' + p.check, onSaved: () => { const vs = voxState(); vs.check = vs.check || {}; if (!vs.check['L' + p.check]) { vs.check['L' + p.check] = { at: E.dateStr() }; touch(); award(10, 'voice'); } render(); } }); cl.push(() => rc.destroy()); }
     const tun = $('#vxtuner', root);
     if (tun) vxRun = runTuner(tun);
     cl.push(() => { if (vxRun) { vxRun.stop(); vxRun = null; } });
@@ -529,7 +670,8 @@ function runTuner(host) {
     const { W, H } = fitCanvas(cv), now = f.t, r = voxRange(), lo = r.lo - 3, hi = r.hi + 3, y = m => H - 8 - (m - lo) / (hi - lo) * (H - 16);
     const css = getComputedStyle(document.documentElement);
     g.clearRect(0, 0, W, H); g.font = '12px monospace'; g.textBaseline = 'middle';
-    for (let m = lo; m <= hi; m++) { if ([1, 3, 6, 8, 10].includes(((m % 12) + 12) % 12)) continue; g.strokeStyle = css.getPropertyValue('--line'); g.beginPath(); g.moveTo(40, y(m)); g.lineTo(W, y(m)); g.stroke(); g.fillStyle = css.getPropertyValue('--muted'); g.fillText(voxName(m), 4, y(m)); }
+    for (let m = lo; m <= hi; m++) { if ([1, 3, 6, 8, 10].includes(((m % 12) + 12) % 12)) continue; g.strokeStyle = css.getPropertyValue('--line'); g.beginPath(); g.moveTo(40, y(m)); g.lineTo(W, y(m)); g.stroke(); }
+    drawKeyStrip(g, H, lo, hi, y, css);
     g.strokeStyle = css.getPropertyValue('--accent'); g.lineWidth = 3; let prev = null;
     trace.forEach(p => { if (now - p.t > 6 || p.m == null) { prev = null; return; } const x = 40 + (W - 48) * (1 - (now - p.t) / 6); if (prev) { g.beginPath(); g.moveTo(prev[0], prev[1]); g.lineTo(x, y(p.m)); g.stroke(); } prev = [x, y(p.m)]; });
     g.lineWidth = 1;
@@ -567,7 +709,7 @@ function runWarmup(host, onEnd) {
 
 /* actions (merged into ACTIONS by actions-boot.js) */
 const VOICE_ACTIONS = {
-  vxgo: el => { const d = el.dataset, prm = { tab: d.tab || 'today' }; if (d.run) prm.run = d.run; if (d.range) prm.range = 1; if (d.warm) prm.warm = 1; go('voice', prm); },
+  vxgo: el => { const d = el.dataset, prm = { tab: d.tab || 'today' }; if (d.run) prm.run = d.run; if (d.range) prm.range = 1; if (d.warm) prm.warm = 1; if (d.next) prm.next = d.next; if (d.test) prm.test = 1; if (d.check) prm.check = +d.check; if (d.song) prm.song = d.song; go('voice', prm); },
   vxguess: el => { const v = voxState(); v.guess = el.dataset.g === 'high' ? 'high' : 'low'; touch(); toast('Exercises will use a ' + (v.guess === 'high' ? 'higher' : 'lower') + ' range until you measure yours.'); render(); },
   vxread: el => { voxState().lessons[el.dataset.id] = true; touch(); render(); },
   vxagain: el => { go('voice', Object.assign({}, route.params, { run: el.dataset.ex, _: Date.now() })); }
